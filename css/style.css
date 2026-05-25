@@ -1,0 +1,420 @@
+*, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+[hidden] { display: none !important; }
+
+body {
+  font-family: system-ui, sans-serif;
+  font-size: 15px;
+  background: #f5f5f5;
+  color: #222;
+  display: flex;
+  flex-direction: row;   /* map left, panel right */
+  height: 100vh;
+  overflow: hidden;
+}
+
+/* ── Map (left, flex fill) ───────────────────────────────────────── */
+#map {
+  flex: 1 1 0;
+  min-width: 200px;
+  position: relative;
+}
+
+/* ── Azimuth popup (inside #map) ─────────────────────────────────── */
+#az-popup {
+  position: absolute;
+  inset: 0;
+  z-index: 1000;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: rgba(0,0,0,0.25);
+}
+
+#az-popup-inner {
+  background: #fff;
+  border-radius: 8px;
+  padding: 16px 20px;
+  box-shadow: 0 4px 20px rgba(0,0,0,0.3);
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  min-width: 240px;
+}
+
+#az-popup-coords {
+  font-size: 12px;
+  color: #666;
+  font-family: monospace;
+}
+
+#az-popup-inner label {
+  display: flex;
+  flex-direction: column;
+  font-size: 14px;
+  color: #444;
+  gap: 4px;
+}
+
+#az-popup-input {
+  padding: 6px 8px;
+  border: 1px solid #ccc;
+  border-radius: 4px;
+  font-size: 16px;
+  width: 100%;
+}
+
+.az-popup-actions {
+  display: flex;
+  gap: 8px;
+  justify-content: flex-end;
+}
+
+/* ── Right panel ─────────────────────────────────────────────────── */
+#panel {
+  width: 360px;
+  flex-shrink: 0;
+  background: #fff;
+  border-left: 1px solid #ddd;
+  display: flex;
+  flex-direction: column;
+  overflow-y: auto;
+  padding: 14px 16px 0;
+  gap: 0;
+}
+
+/* ── Sections ────────────────────────────────────────────────────── */
+.section {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  padding: 12px 0;
+  border-bottom: 1px solid #eee;
+}
+
+.section:first-child { padding-top: 4px; }
+#help-section { border-bottom: none; }
+
+.section-title {
+  font-size: 11px;
+  font-weight: 700;
+  color: #888;
+  text-transform: uppercase;
+  letter-spacing: 0.07em;
+}
+
+.sub-label {
+  font-size: 11px;
+  color: #999;
+  margin-bottom: 3px;
+}
+
+.control-row {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  flex-wrap: wrap;
+}
+
+.algo-row {
+  display: flex;
+  gap: 16px;
+  flex-wrap: wrap;
+  align-items: flex-start;
+}
+
+/* ── Radio button group ──────────────────────────────────────────── */
+.radio-group {
+  display: flex;
+}
+
+.radio-btn {
+  padding: 5px 14px;
+  border: 1px solid #aaa;
+  background: #fff;
+  font-size: 14px;
+  font-weight: 500;
+  cursor: pointer;
+  white-space: nowrap;
+  transition: background 0.15s, color 0.15s;
+}
+
+.radio-btn:first-child { border-radius: 16px 0 0 16px; border-right: none; }
+.radio-btn:last-child  { border-radius: 0 16px 16px 0; }
+
+.radio-btn.active {
+  background: #4e79a7;
+  color: #fff;
+  border-color: #4e79a7;
+}
+
+.radio-btn:not(.active):hover { background: #f0f0f0; }
+
+/* ── Declination note ────────────────────────────────────────────── */
+.inline-note {
+  font-size: 13px;
+  color: #888;
+  font-family: monospace;
+}
+
+.inline-note.highlight { color: #b06000; font-weight: 600; }
+
+/* ── Date row ────────────────────────────────────────────────────── */
+.date-row {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  font-size: 13px;
+  color: #555;
+}
+
+.date-row input {
+  padding: 3px 6px;
+  border: 1px solid #ccc;
+  border-radius: 4px;
+  font-size: 13px;
+}
+
+/* ── Error banner ────────────────────────────────────────────────── */
+#error-banner {
+  background: #fee;
+  color: #c00;
+  border: 1px solid #fcc;
+  border-radius: 4px;
+  padding: 6px 10px;
+  font-size: 13px;
+  margin-bottom: 4px;
+}
+
+/* ── Station list ────────────────────────────────────────────────── */
+#station-list {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.station-row {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.station-badge {
+  width: 26px;
+  height: 26px;
+  border-radius: 50%;
+  color: #fff;
+  font-size: 11px;
+  font-weight: 700;
+  text-align: center;
+  line-height: 26px;
+  flex-shrink: 0;
+}
+
+.station-row input.latlon-input {
+  flex: 1;
+  padding: 4px 6px;
+  border: 1px solid #ccc;
+  border-radius: 4px;
+  font-size: 13px;
+  min-width: 0;
+}
+
+.station-row input.az-input {
+  width: 60px;
+  padding: 4px 5px;
+  border: 1px solid #ccc;
+  border-radius: 4px;
+  font-size: 13px;
+  text-align: right;
+}
+
+.az-label {
+  font-size: 11px;
+  color: #999;
+  flex-shrink: 0;
+}
+
+.btn-delete {
+  padding: 3px 7px;
+  border: 1px solid #e88;
+  border-radius: 4px;
+  background: #fff0f0;
+  color: #c00;
+  cursor: pointer;
+  font-size: 12px;
+  flex-shrink: 0;
+}
+
+.btn-delete:hover { background: #ffe0e0; }
+
+/* ── Action buttons ──────────────────────────────────────────────── */
+#station-actions {
+  display: flex;
+  gap: 6px;
+  flex-wrap: wrap;
+}
+
+.btn-action {
+  padding: 5px 10px;
+  border: 1px solid #aaa;
+  border-radius: 4px;
+  background: #fff;
+  cursor: pointer;
+  font-size: 13px;
+}
+
+.btn-action:hover { background: #f0f0f0; }
+
+.btn-action.danger {
+  border-color: #e88;
+  color: #c00;
+  background: #fff0f0;
+}
+
+.btn-action.danger:hover { background: #ffe0e0; }
+
+/* ── Manual form ─────────────────────────────────────────────────── */
+#manual-form {
+  display: flex;
+  flex-direction: column;
+  gap: 7px;
+  padding: 10px 12px;
+  background: #fafafa;
+  border: 1px solid #eee;
+  border-radius: 6px;
+}
+
+#manual-form label {
+  display: flex;
+  flex-direction: column;
+  font-size: 12px;
+  color: #555;
+  gap: 3px;
+}
+
+#manual-form input {
+  padding: 5px 7px;
+  border: 1px solid #ccc;
+  border-radius: 4px;
+  font-size: 14px;
+}
+
+.form-actions {
+  display: flex;
+  gap: 6px;
+  margin-top: 2px;
+}
+
+/* ── Results ─────────────────────────────────────────────────────── */
+.result-row {
+  display: flex;
+  gap: 8px;
+  align-items: baseline;
+  font-size: 14px;
+}
+
+.result-label {
+  color: #777;
+  flex-shrink: 0;
+  min-width: 68px;
+}
+
+.result-value {
+  font-weight: 700;
+  font-family: monospace;
+  font-size: 14px;
+}
+
+.result-value.warn { color: #b06000; }
+
+/* ── Link-style button ───────────────────────────────────────────── */
+.link-btn {
+  background: none;
+  border: none;
+  color: #4e79a7;
+  cursor: pointer;
+  font-size: 13px;
+  padding: 0;
+  text-align: left;
+}
+
+.link-btn:hover { text-decoration: underline; }
+
+/* ── Help ────────────────────────────────────────────────────────── */
+#help-body {
+  font-size: 13px;
+  color: #555;
+  line-height: 1.65;
+}
+
+#help-body dt {
+  font-weight: 600;
+  color: #333;
+  margin-top: 8px;
+}
+
+#help-body dd {
+  margin-left: 10px;
+  color: #666;
+}
+
+/* ── Angles table ────────────────────────────────────────────────── */
+#all-angles table {
+  border-collapse: collapse;
+  font-size: 13px;
+  margin-top: 4px;
+}
+
+#all-angles td { padding: 2px 14px 2px 0; color: #444; }
+
+/* ── Panel bottom spacer ─────────────────────────────────────────── */
+.panel-spacer { height: 16px; flex-shrink: 0; }
+
+/* ── Primary / Secondary buttons ────────────────────────────────── */
+.btn-primary {
+  padding: 5px 16px;
+  border: none;
+  border-radius: 4px;
+  background: #4e79a7;
+  color: #fff;
+  cursor: pointer;
+  font-size: 14px;
+}
+
+.btn-primary:hover { background: #3a6090; }
+
+.btn-secondary {
+  padding: 5px 14px;
+  border: 1px solid #aaa;
+  border-radius: 4px;
+  background: #fff;
+  cursor: pointer;
+  font-size: 14px;
+}
+
+.btn-secondary:hover { background: #f0f0f0; }
+
+/* ── Leaflet custom markers ──────────────────────────────────────── */
+.station-marker {
+  width: 28px;
+  height: 28px;
+  border-radius: 50%;
+  color: #fff;
+  font-size: 11px;
+  font-weight: 700;
+  text-align: center;
+  line-height: 28px;
+  border: 2px solid rgba(0,0,0,0.3);
+  box-shadow: 0 1px 4px rgba(0,0,0,0.4);
+}
+
+.target-marker {
+  width: 24px;
+  height: 24px;
+  color: #e00;
+  font-size: 22px;
+  font-weight: 900;
+  text-align: center;
+  line-height: 24px;
+  text-shadow: 0 0 3px #fff, 0 0 6px #fff;
+}

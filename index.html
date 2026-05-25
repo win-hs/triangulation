@@ -1,0 +1,158 @@
+<!DOCTYPE html>
+<html lang="zh-TW">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>三角定位 GIS 教學工具</title>
+
+  <!-- Leaflet -->
+  <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css">
+  <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
+
+  <!-- Turf.js -->
+  <script src="https://unpkg.com/@turf/turf@6.5.0/turf.min.js"></script>
+
+  <!-- geomag.js (WMM2025 magnetic declination, self-hosted) -->
+  <script src="js/geomag.js"></script>
+
+  <link rel="stylesheet" href="css/style.css">
+</head>
+<body>
+
+<!-- ── Map (left, fills remaining width) ──────────────────────────── -->
+<div id="map">
+  <!-- Azimuth popup — inside map so position:absolute covers it -->
+  <div id="az-popup" hidden>
+    <div id="az-popup-inner">
+      <div id="az-popup-coords"></div>
+      <label>方位角（0–360°）
+        <input type="number" id="az-popup-input" step="0.1" min="0" max="360" placeholder="0–360">
+      </label>
+      <div class="az-popup-actions">
+        <button id="az-popup-confirm" class="btn-primary">確認</button>
+        <button id="az-popup-cancel"  class="btn-secondary">取消</button>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- ── Right panel ────────────────────────────────────────────────── -->
+<div id="panel">
+
+  <!-- Error banner (floats above sections when visible) -->
+  <div id="error-banner" hidden></div>
+
+  <!-- ① 北向 -->
+  <div class="section">
+    <div class="section-title">北向</div>
+    <div class="control-row">
+      <div class="radio-group">
+        <button id="btn-north-true"     class="radio-btn active">真北</button>
+        <button id="btn-north-magnetic" class="radio-btn">磁北</button>
+      </div>
+      <span id="declination-display" class="inline-note" hidden></span>
+    </div>
+    <div id="date-label" class="date-row" hidden>
+      <span>日期</span>
+      <input type="date" id="date-input">
+    </div>
+  </div>
+
+  <!-- ② 座標輸入順序 -->
+  <div class="section">
+    <div class="section-title">座標輸入順序</div>
+    <div class="radio-group">
+      <button id="btn-coord-latlon" class="radio-btn active">緯,經</button>
+      <button id="btn-coord-lonlat" class="radio-btn">經,緯</button>
+    </div>
+  </div>
+
+  <!-- ③ 計算方法 -->
+  <div class="section">
+    <div class="section-title">計算方法</div>
+    <div class="algo-row">
+      <div>
+        <div class="sub-label">交會算法</div>
+        <div class="radio-group">
+          <button id="btn-line-planar"   class="radio-btn active">平面</button>
+          <button id="btn-line-geodesic" class="radio-btn">Geodesic</button>
+        </div>
+      </div>
+      <div>
+        <div class="sub-label">估算器</div>
+        <div class="radio-group">
+          <button id="btn-est-centroid" class="radio-btn active">Centroid</button>
+          <button id="btn-est-mle"      class="radio-btn">MLE</button>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- ④ 觀測站 -->
+  <div class="section">
+    <div class="section-title">觀測站</div>
+    <div id="station-list"></div>
+    <div id="station-actions">
+      <button id="btn-add-manual" class="btn-action">＋ 手動新增</button>
+      <button id="btn-add-map"    class="btn-action">＋ 地圖點選</button>
+      <button id="btn-clear"      class="btn-action danger">清空</button>
+    </div>
+    <div id="manual-form" hidden>
+      <label>座標
+        <input type="text" id="input-latlon" placeholder="例：24.0, 120.5">
+      </label>
+      <label>方位角°
+        <input type="number" id="input-az" step="0.1" min="0" max="360" placeholder="0–360">
+      </label>
+      <div class="form-actions">
+        <button id="btn-manual-confirm" class="btn-primary">確認</button>
+        <button id="btn-manual-cancel"  class="btn-secondary">取消</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- ⑤ 結果 -->
+  <div class="section" id="results">
+    <div class="section-title">結果</div>
+    <div class="result-row">
+      <span class="result-label">目標座標</span>
+      <span class="result-value" id="result-target">—</span>
+    </div>
+    <div class="result-row">
+      <span class="result-label">最小銳角</span>
+      <span class="result-value" id="result-min-angle">—</span>
+    </div>
+    <button id="toggle-angles" class="link-btn">▼ 展開全部夾角</button>
+    <div id="all-angles" hidden>
+      <table><tbody id="all-angles-body"></tbody></table>
+    </div>
+  </div>
+
+  <!-- ⑥ 使用說明 -->
+  <div class="section" id="help-section">
+    <button id="help-toggle" class="link-btn">❓ 使用說明 ▶</button>
+    <dl id="help-body" hidden>
+      <dt>真北 / 磁北</dt>
+      <dd>方位角基準。真北＝地圖北；磁北＝羅盤北。選磁北時需輸入日期，系統自動換算磁偏角，旁邊顯示當前偏差值。</dd>
+      <dt>緯,經 / 經,緯</dt>
+      <dd>座標輸入順序。台灣常用「緯度, 經度」（如 24.0, 120.5）；部分 GPS 設備輸出「經度, 緯度」。</dd>
+      <dt>平面 / Geodesic</dt>
+      <dd>平面法：緯經視為 XY，速度快，＜100 km 誤差小。Geodesic：球面大圓交會，長距離更準確。</dd>
+      <dt>MLE / Centroid</dt>
+      <dd>MLE（最大概似估計）：對方位誤差加權，精度較高。Centroid：所有交點平均，計算簡單但易受離群值影響。</dd>
+      <dt>最小銳角</dt>
+      <dd>兩方位線夾角。建議 ＞30°；角度過小時定位誤差急遽放大（三角形幾何退化）。</dd>
+    </dl>
+  </div>
+
+  <div class="panel-spacer"></div>
+</div>
+
+<!-- App scripts -->
+<script src="js/core.js"></script>
+<script src="js/magnetic.js"></script>
+<script src="js/map.js"></script>
+<script src="js/main.js"></script>
+
+</body>
+</html>
