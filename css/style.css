@@ -1,3 +1,5 @@
+/* 無線電追蹤三角定位工具 — style.css */
+
 *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
 [hidden] { display: none !important; }
 
@@ -80,6 +82,26 @@ body {
   overflow-y: auto;
   padding: 14px 16px 0;
   gap: 0;
+}
+
+/* ── App header ──────────────────────────────────────────────────── */
+#app-header {
+  padding: 10px 0 12px;
+  border-bottom: 2px solid #4e79a7;
+  margin-bottom: 2px;
+}
+
+#app-title {
+  font-size: 15px;
+  font-weight: 700;
+  color: #222;
+  letter-spacing: 0.01em;
+}
+
+#app-version {
+  font-size: 11px;
+  color: #aaa;
+  margin-top: 2px;
 }
 
 /* ── Sections ────────────────────────────────────────────────────── */
@@ -326,6 +348,30 @@ body {
 }
 
 .result-value.warn { color: #b06000; }
+
+/* ── Result action buttons (copy / maps) ────────────────────────── */
+#result-actions {
+  display: flex;
+  gap: 6px;
+  margin-top: 2px;
+}
+
+.btn-result-action {
+  padding: 4px 10px;
+  border: 1px solid #ccc;
+  border-radius: 4px;
+  background: #f7f7f7;
+  color: #333;
+  cursor: pointer;
+  font-size: 12px;
+  text-decoration: none;
+  display: inline-flex;
+  align-items: center;
+  gap: 3px;
+  transition: background 0.15s;
+}
+
+.btn-result-action:hover { background: #e8e8e8; border-color: #aaa; }
 
 /* ── Link-style button ───────────────────────────────────────────── */
 .link-btn {

@@ -1,4 +1,4 @@
-// map.js — Leaflet map wrapper
+// 無線電追蹤三角定位工具 — map.js — Leaflet map wrapper
 
 'use strict';
 

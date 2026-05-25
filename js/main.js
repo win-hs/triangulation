@@ -1,4 +1,4 @@
-// main.js — UI state and event handling
+// 無線電追蹤三角定位工具 — main.js — UI state and event handling
 
 'use strict';
 
@@ -160,6 +160,16 @@ btnEstCentroid.addEventListener('click', () => {
   state.estimator = 'centroid';
   updateAlgoUI();
   recalculate();
+});
+
+// ── Copy coords & Google Maps ─────────────────────────────────────────────
+document.getElementById('btn-copy-coords').addEventListener('click', () => {
+  const text = resultTargetEl.textContent;
+  navigator.clipboard.writeText(text).then(() => {
+    const btn = document.getElementById('btn-copy-coords');
+    btn.textContent = '✓ 已複製';
+    setTimeout(() => { btn.textContent = '📋 複製'; }, 1500);
+  });
 });
 
 // ── Angles toggle ──────────────────────────────────────────────────────────
@@ -410,7 +420,13 @@ function recalculate() {
     result.target,
   ]);
 
+  const targetLatLon = `${result.target.lat.toFixed(5)}, ${result.target.lon.toFixed(5)}`;
   resultTargetEl.textContent = formatLatLon(result.target.lat, result.target.lon);
+
+  // Copy & Google Maps buttons
+  document.getElementById('result-actions').hidden = false;
+  document.getElementById('btn-open-maps').href =
+    `https://www.google.com/maps?q=${result.target.lat},${result.target.lon}`;
 
   const minA = result.minAcuteAngle;
   const warn = minA.value < 30;
@@ -439,4 +455,6 @@ function clearResults() {
   resultAngleEl.textContent = '—';
   resultAngleEl.className = 'result-value';
   allAnglesBodyEl.innerHTML = '';
+  document.getElementById('result-actions').hidden = true;
+  document.getElementById('btn-copy-coords').textContent = '📋 複製';
 }

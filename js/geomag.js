@@ -1,4 +1,4 @@
-// geomag.js — self-contained WMM2025 magnetic declination calculator
+// 無線電追蹤三角定位工具 — geomag.js — self-contained WMM2025 magnetic declination calculator
 // Adapted from the geomagnetism npm package (MIT licence)
 // Exposes: geoMag(lat, lon, altKm, date) → {dec: degrees}
 

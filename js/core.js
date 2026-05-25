@@ -1,4 +1,4 @@
-// core.js — pure triangulation math, no DOM, no side effects
+// 無線電追蹤三角定位工具 — core.js — pure triangulation math, no DOM, no side effects
 
 'use strict';
 

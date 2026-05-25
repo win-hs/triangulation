@@ -1,4 +1,4 @@
-// magnetic.js — WMM magnetic declination wrapper (geomag.js)
+// 無線電追蹤三角定位工具 — magnetic.js — WMM magnetic declination wrapper (geomag.js)
 
 'use strict';
 

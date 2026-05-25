@@ -39,6 +39,12 @@
 <!-- ── Right panel ────────────────────────────────────────────────── -->
 <div id="panel">
 
+  <!-- App header -->
+  <div id="app-header">
+    <div id="app-title">無線電追蹤三角定位工具</div>
+    <div id="app-version">v0.1 · 2026-05-25</div>
+  </div>
+
   <!-- Error banner (floats above sections when visible) -->
   <div id="error-banner" hidden></div>
 
@@ -117,6 +123,10 @@
     <div class="result-row">
       <span class="result-label">目標座標</span>
       <span class="result-value" id="result-target">—</span>
+    </div>
+    <div id="result-actions" hidden>
+      <button id="btn-copy-coords" class="btn-result-action">📋 複製</button>
+      <a id="btn-open-maps" href="#" target="_blank" class="btn-result-action">🗺 Google Maps</a>
     </div>
     <div class="result-row">
       <span class="result-label">最小銳角</span>
