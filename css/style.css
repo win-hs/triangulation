@@ -49,12 +49,28 @@ body {
   z-index: 30;
 }
 
+.app-bar-brand {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  min-width: 0;
+}
+
+.app-bar-logo {
+  width: 32px;
+  height: 32px;
+  object-fit: contain;
+  flex: none;
+}
+
 .app-bar-title {
-  font-size: 22px;
-  font-weight: 400;
+  font-size: 20px;
+  font-weight: 700;
   color: var(--md-on-surface);
   letter-spacing: 0;
   white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
 }
 
 .app-bar-actions { display: flex; align-items: center; gap: 4px; }
@@ -244,8 +260,10 @@ body {
   transition: background 0.15s, color 0.15s;
 }
 
-.radio-btn:first-child { border-radius: 18px 0 0 18px; border-right: none; }
-.radio-btn:last-child  { border-radius: 0 18px 18px 0; }
+/* Both buttons keep a full border; the -1px pull collapses the two adjoining
+   borders into a single divider that stays visible whichever side is active. */
+.radio-btn:first-child { border-radius: 18px 0 0 18px; }
+.radio-btn:last-child  { border-radius: 0 18px 18px 0; margin-left: -1px; }
 
 .radio-btn.active {
   background: var(--md-primary-container);
