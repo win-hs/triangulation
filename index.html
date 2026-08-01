@@ -13,7 +13,7 @@
   <meta property="og:locale" content="zh_TW">
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-  <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Calistoga&family=Inter:wght@400;500;600;700&family=JetBrains+Mono:wght@400;500&display=swap">
+  <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Roboto:wght@400;500;700&family=Roboto+Mono:wght@400;500&family=Noto+Sans+TC:wght@400;500;700&display=swap">
 
   <!-- Leaflet -->
   <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css">
@@ -28,6 +28,24 @@
   <link rel="stylesheet" href="css/style.css">
 </head>
 <body>
+
+<!-- ── Top app bar (full width, above map + panel) ─────────────────── -->
+<header class="app-bar">
+  <h1 class="app-bar-title">Triangulation</h1>
+  <nav class="app-bar-actions">
+    <a class="md-btn" href="https://sites.google.com/view/fieldbox/homepage">
+      <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M20 11H7.8l5.6-5.6L12 4l-8 8 8 8 1.4-1.4L7.8 13H20v-2z"/></svg>
+      返回 Field-Box 首頁
+    </a>
+    <a class="md-btn" href="mailto:a.wen90@gmail.com?subject=Field-Box%20%E5%9B%9E%E5%A0%B1%EF%BC%9ATriangulation">
+      <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M20 4H4c-1.1 0-2 .9-2 2v12c0 1.1.9 2 2 2h16c1.1 0 2-.9 2-2V6c0-1.1-.9-2-2-2zm0 4-8 5-8-5V6l8 5 8-5v2z"/></svg>
+      回報問題
+    </a>
+    <span class="visit-chip">總造訪次數<b id="visits">--------</b></span>
+  </nav>
+</header>
+
+<div class="app-body">
 
 <!-- ── Map (left, fills remaining width) ──────────────────────────── -->
 <div id="map">
@@ -48,16 +66,6 @@
 
 <!-- ── Right panel ────────────────────────────────────────────────── -->
 <div id="panel">
-
-  <!-- App header -->
-  <div id="app-header">
-    <div id="app-title">Triangulation</div>
-    <div class="fb-util">
-      <a class="fb-pill" href="mailto:a.wen90@gmail.com?subject=Field-Box%20%E5%9B%9E%E5%A0%B1%EF%BC%9ATriangulation">回報問題</a>
-      <span class="fb-pill fb-pill-static"><span class="fb-dot"></span>總造訪次數 <b id="visits">--------</b></span>
-      <a class="fb-pill" href="https://sites.google.com/view/fieldbox/homepage">← 返回FieldBox首頁</a>
-    </div>
-  </div>
 
   <!-- Error banner (floats above sections when visible) -->
   <div id="error-banner" hidden></div>
@@ -171,6 +179,8 @@
 
   <div class="panel-spacer"></div>
 </div>
+
+</div><!-- /.app-body -->
 
 <!-- App scripts -->
 <script src="js/core.js"></script>
