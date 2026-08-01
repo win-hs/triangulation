@@ -131,45 +131,7 @@ body {
   position: relative;
 }
 
-/* ── Mobile: stack map above panel; the 360px side panel cannot fit ──── */
-@media (max-width: 768px) {
-  .app-bar { height: 56px; padding: 0 8px 0 12px; gap: 8px; }
-  .app-bar-title { font-size: 15px; }
-  .app-bar-logo { width: 26px; height: 26px; }
-  .app-bar-actions { gap: 0; }
-  /* Icon-only actions: zero out the label but keep it for screen readers */
-  .md-btn { font-size: 0; gap: 0; padding: 0; width: 44px; height: 44px; justify-content: center; }
-  .md-btn svg { width: 22px; height: 22px; }
-  .visit-chip { display: none; }
 
-  .app-body { flex-direction: column; }
-  #map { flex: none; height: 45vh; min-height: 260px; width: 100%; }
-  #panel {
-    width: 100%;
-    flex: 1 1 auto;
-    min-height: 0;
-    border-left: none;
-    border-top: 1px solid var(--md-outline);
-  }
-
-  /* Touch targets — 44px minimum */
-  .radio-btn { padding: 11px 18px; font-size: 14px; }
-  .btn-action { padding: 11px 16px; font-size: 14px; }
-  .btn-primary, .btn-secondary { height: 44px; }
-  .btn-result-action { padding: 10px 16px; font-size: 13px; }
-  .link-btn { padding: 8px 0; font-size: 14px; }
-  .btn-delete { padding: 9px 12px; font-size: 14px; }
-  .station-badge { width: 32px; height: 32px; line-height: 32px; font-size: 12px; }
-
-  /* Legibility */
-  .section-title { font-size: 12px; }
-  .sub-label { font-size: 12px; }
-  .inline-note { font-size: 13px; }
-  .result-row { font-size: 15px; }
-  /* 16px inputs stop iOS from auto-zooming on focus */
-  .station-row input, #manual-form input, .date-row input { font-size: 16px; padding: 9px 8px; }
-  .station-row input.az-input { width: 74px; }
-}
 
 /* ── Azimuth popup (inside #map) ─────────────────────────────────── */
 #az-popup {
@@ -633,4 +595,44 @@ body {
   text-align: center;
   line-height: 24px;
   text-shadow: 0 0 3px #fff, 0 0 6px #fff;
+}
+
+/* ── Mobile: stack map above panel; the 360px side panel cannot fit ──── */
+@media (max-width: 768px) {
+  .app-bar { height: 56px; padding: 0 8px 0 12px; gap: 8px; }
+  .app-bar-title { font-size: 15px; }
+  .app-bar-logo { width: 26px; height: 26px; }
+  .app-bar-actions { gap: 0; }
+  /* Icon-only actions: zero out the label but keep it for screen readers */
+  .md-btn { font-size: 0; gap: 0; padding: 0; width: 44px; height: 44px; justify-content: center; }
+  .md-btn svg { width: 22px; height: 22px; }
+  .visit-chip { display: none; }
+
+  .app-body { flex-direction: column; }
+  #map { flex: none; height: 45vh; min-height: 260px; width: 100%; }
+  #panel {
+    width: 100%;
+    flex: 1 1 auto;
+    min-height: 0;
+    border-left: none;
+    border-top: 1px solid var(--md-outline);
+  }
+
+  /* Touch targets — 44px minimum */
+  .radio-btn { padding: 11px 18px; font-size: 14px; }
+  .btn-action { padding: 11px 16px; font-size: 14px; }
+  .btn-primary, .btn-secondary { height: 44px; }
+  .btn-result-action { padding: 10px 16px; font-size: 13px; }
+  .link-btn { padding: 8px 0; font-size: 14px; }
+  .btn-delete { padding: 9px 12px; font-size: 14px; }
+  .station-badge { width: 32px; height: 32px; line-height: 32px; font-size: 12px; }
+
+  /* Legibility */
+  .section-title { font-size: 12px; }
+  .sub-label { font-size: 12px; }
+  .inline-note { font-size: 13px; }
+  .result-row { font-size: 15px; }
+  /* 16px inputs stop iOS from auto-zooming on focus */
+  .station-row input, #manual-form input, .date-row input { font-size: 16px; padding: 9px 8px; }
+  .station-row input.az-input { width: 74px; }
 }
