@@ -26,6 +26,8 @@ const BASE_LAYERS = {
 let map = null;
 let layerControl = null;
 let overlayGroup = null;  // holds all drawn features
+let stationMarkers = new Map();  // stationId -> Leaflet marker
+let stationLines = new Map();    // stationId -> Leaflet polyline
 
 function initMap(containerId) {
   map = L.map(containerId, {
@@ -51,19 +53,29 @@ function stationColor(index) {
  */
 function clearOverlays() {
   overlayGroup.clearLayers();
+  stationMarkers.clear();
+  stationLines.clear();
 }
 
 /**
- * Draw station marker with label.
+ * Draw station marker with label. If stationId/onSelect given, the marker
+ * becomes clickable: shows an info popup and notifies onSelect(stationId)
+ * so the UI can highlight the matching row in the station list.
  */
-function drawStation(lat, lon, label, color) {
+function drawStation(lat, lon, label, color, stationId, infoHtml, onSelect) {
   const icon = L.divIcon({
     className: '',
     html: `<div class="station-marker" style="background:${color}">${label}</div>`,
     iconSize: [28, 28],
     iconAnchor: [14, 14],
   });
-  L.marker([lat, lon], { icon }).addTo(overlayGroup);
+  const marker = L.marker([lat, lon], { icon }).addTo(overlayGroup);
+  if (infoHtml) marker.bindPopup(infoHtml);
+  if (stationId != null) {
+    stationMarkers.set(stationId, marker);
+    marker.on('click', () => onSelect && onSelect(stationId));
+  }
+  return marker;
 }
 
 /**
@@ -72,7 +84,7 @@ function drawStation(lat, lon, label, color) {
  * true straight line in lat/lon space, matching the planar intersection
  * calculation even at high zoom levels.
  */
-function drawBearingLine(lat, lon, azimuth, lineLength, color) {
+function drawBearingLine(lat, lon, azimuth, lineLength, color, stationId, infoHtml, onSelect) {
   const azRad = azimuth * Math.PI / 180;
   const sinAz = Math.sin(azRad);
   const cosAz = Math.cos(azRad);
@@ -84,13 +96,34 @@ function drawBearingLine(lat, lon, azimuth, lineLength, color) {
     const d = stepDeg * i;
     points.push([lat + d * cosAz, lon + d * sinAz]);
   }
-  const farLat = points[n][0];
-  const farLon = points[n][1];
-  L.polyline(points, {
+  const line = L.polyline(points, {
     color,
     weight: 2,
     opacity: 0.85,
   }).addTo(overlayGroup);
+  // Wider invisible line underneath makes the thin bearing line easier to click.
+  L.polyline(points, { color, weight: 14, opacity: 0 })
+    .addTo(overlayGroup)
+    .on('click', () => onSelect && onSelect(stationId))
+    .bindPopup(infoHtml || '');
+  if (infoHtml) line.bindPopup(infoHtml);
+  if (stationId != null) {
+    stationLines.set(stationId, line);
+    line.on('click', () => onSelect && onSelect(stationId));
+  }
+  return line;
+}
+
+/**
+ * Open a station's popup and pan the map to it (used when the matching
+ * row is selected from the right-hand list).
+ */
+function focusStation(stationId) {
+  const marker = stationMarkers.get(stationId);
+  if (marker) {
+    map.panTo(marker.getLatLng());
+    marker.openPopup();
+  }
 }
 
 /**

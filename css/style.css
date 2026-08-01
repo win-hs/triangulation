@@ -1,13 +1,29 @@
 /* 無線電追蹤三角定位工具 — style.css */
 
+:root {
+  --ink: #0F172A;
+  --accent: #0052FF;
+  --accent-2: #4D7CFF;
+  --border: #E2E8F0;
+  --radius: 12px;
+  --gradient: linear-gradient(135deg, var(--accent), var(--accent-2));
+  --shadow-sm: 0 1px 3px rgba(0,0,0,.06);
+  --shadow-md: 0 4px 10px rgba(0,0,0,.08);
+  --shadow-accent: 0 4px 14px rgba(0,82,255,.25);
+  --font-display: "Calistoga", Georgia, serif;
+  --font-sans: "Inter", system-ui, sans-serif;
+  --font-mono: "JetBrains Mono", monospace;
+}
+
 *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
 [hidden] { display: none !important; }
+:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
 
 body {
-  font-family: system-ui, sans-serif;
+  font-family: var(--font-sans);
   font-size: 15px;
   background: #f5f5f5;
-  color: #222;
+  color: var(--ink);
   display: flex;
   flex-direction: row;   /* map left, panel right */
   height: 100vh;
@@ -84,26 +100,43 @@ body {
   gap: 0;
 }
 
-/* ── App header ──────────────────────────────────────────────────── */
+/* ── App header — inverted dark bar, sticky at top of panel ────────── */
 #app-header {
-  padding: 12px 0 14px;
-  border-bottom: 2px solid #4e79a7;
-  margin-bottom: 2px;
-  text-align: center;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+  flex-wrap: wrap;
+  background: var(--ink);
+  margin: 0 -16px 12px;
+  padding: 16px;
+  position: sticky;
+  top: 0;
+  z-index: 20;
 }
 
 #app-title {
+  font-family: var(--font-display);
   font-size: 18px;
-  font-weight: 800;
-  color: #1a3a5c;
-  letter-spacing: 0.02em;
+  color: #fff;
+  letter-spacing: -0.01em;
 }
 
-#app-version {
-  font-size: 12px;
-  color: #aaa;
-  margin-top: 3px;
+.fb-util { display: flex; align-items: center; gap: 6px; flex-wrap: wrap; font-family: var(--font-sans); }
+.fb-pill {
+  display: inline-flex; align-items: center; gap: 5px;
+  font-size: 11px; font-weight: 500; color: var(--ink);
+  background: #fff; border: 1px solid var(--border);
+  padding: 5px 10px; border-radius: 20px; text-decoration: none;
+  box-shadow: var(--shadow-sm); white-space: nowrap;
+  transition: box-shadow .2s ease-out, transform .2s ease-out;
 }
+a.fb-pill:hover { box-shadow: var(--shadow-md); transform: translateY(-1px); }
+.fb-pill-static { color: rgba(255,255,255,.85); background: rgba(255,255,255,.08); border-color: rgba(255,255,255,.18); box-shadow: none; }
+.fb-pill b { font-variant-numeric: tabular-nums; letter-spacing: .5px; color: #fff; }
+.fb-dot { width: 6px; height: 6px; border-radius: 50%; background: var(--accent-2); flex: none; }
+@media (prefers-reduced-motion: no-preference) { .fb-dot { animation: fb-pulse 2s infinite; } }
+@keyframes fb-pulse { 0%, 100% { transform: scale(1); opacity: 1; } 50% { transform: scale(1.35); opacity: .6; } }
 
 /* ── Sections ────────────────────────────────────────────────────── */
 .section {
@@ -118,11 +151,20 @@ body {
 #help-section { border-bottom: none; }
 
 .section-title {
-  font-size: 11px;
-  font-weight: 700;
-  color: #888;
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  font-family: var(--font-mono);
+  font-size: 10px;
+  font-weight: 500;
+  color: var(--accent);
   text-transform: uppercase;
-  letter-spacing: 0.07em;
+  letter-spacing: 0.1em;
+  background: rgba(0,82,255,.05);
+  border: 1px solid rgba(0,82,255,.2);
+  padding: 3px 9px;
+  border-radius: 20px;
+  width: fit-content;
 }
 
 .sub-label {
@@ -165,9 +207,9 @@ body {
 .radio-btn:last-child  { border-radius: 0 16px 16px 0; }
 
 .radio-btn.active {
-  background: #4e79a7;
+  background: var(--gradient);
   color: #fff;
-  border-color: #4e79a7;
+  border-color: transparent;
 }
 
 .radio-btn:not(.active):hover { background: #f0f0f0; }
@@ -231,6 +273,19 @@ body {
   text-align: center;
   line-height: 26px;
   flex-shrink: 0;
+  cursor: pointer;
+  transition: transform .15s ease-out, box-shadow .15s ease-out;
+}
+.station-badge:hover { transform: scale(1.12); box-shadow: 0 0 0 3px rgba(0,82,255,.25); }
+
+.station-row {
+  border-radius: 8px;
+  padding: 3px 4px;
+  transition: background .2s ease-out;
+}
+.station-row.active {
+  background: rgba(0,82,255,.06);
+  box-shadow: inset 3px 0 0 var(--accent);
 }
 
 .station-row input.latlon-input {
@@ -280,11 +335,14 @@ body {
 .btn-action {
   padding: 5px 10px;
   border: 1px solid #aaa;
-  border-radius: 4px;
+  border-radius: var(--radius);
   background: #fff;
   cursor: pointer;
   font-size: 13px;
+  transition: box-shadow .2s ease-out, transform .2s ease-out;
 }
+.btn-action:hover { box-shadow: var(--shadow-sm); }
+.btn-action:active { transform: scale(.97); }
 
 .btn-action:hover { background: #f0f0f0; }
 
@@ -419,25 +477,31 @@ body {
 
 /* ── Primary / Secondary buttons ────────────────────────────────── */
 .btn-primary {
-  padding: 5px 16px;
+  padding: 6px 18px;
   border: none;
-  border-radius: 4px;
-  background: #4e79a7;
+  border-radius: var(--radius);
+  background: var(--gradient);
   color: #fff;
   cursor: pointer;
   font-size: 14px;
+  font-weight: 600;
+  box-shadow: var(--shadow-sm);
+  transition: all .2s ease-out;
 }
 
-.btn-primary:hover { background: #3a6090; }
+.btn-primary:hover { box-shadow: var(--shadow-accent); transform: translateY(-1px); filter: brightness(1.05); }
+.btn-primary:active { transform: scale(.98); }
 
 .btn-secondary {
-  padding: 5px 14px;
+  padding: 6px 16px;
   border: 1px solid #aaa;
-  border-radius: 4px;
+  border-radius: var(--radius);
   background: #fff;
   cursor: pointer;
   font-size: 14px;
+  transition: box-shadow .2s ease-out;
 }
+.btn-secondary:hover { box-shadow: var(--shadow-sm); }
 
 .btn-secondary:hover { background: #f0f0f0; }
 

@@ -249,8 +249,9 @@ function renderStationList() {
     const color = stationColor(idx);
     const row = document.createElement('div');
     row.className = 'station-row';
+    row.dataset.stationId = s.id;
     row.innerHTML = `
-      <span class="station-badge" style="background:${color}">#${s.id}</span>
+      <span class="station-badge" style="background:${color}" title="在地圖上定位這一站">#${s.id}</span>
       <input type="text" class="latlon-input"
              value="${formatLatLon(s.lat, s.lon)}"
              placeholder="${coordHint}"
@@ -280,6 +281,26 @@ function renderStationList() {
       deleteStation(parseInt(e.target.dataset.id));
     });
   });
+
+  stationListEl.querySelectorAll('.station-badge').forEach(badge => {
+    badge.addEventListener('click', e => {
+      const id = parseInt(e.target.closest('.station-row').dataset.stationId);
+      selectStation(id);
+      focusStation(id);
+    });
+  });
+}
+
+// ── Map ↔ list selection ────────────────────────────────────────────────────
+// Clicking a station marker/line on the map highlights the matching row in
+// the list; clicking a row's badge pans the map to that station and opens
+// its popup. Keeps the two views in sync.
+function selectStation(id) {
+  stationListEl.querySelectorAll('.station-row').forEach(row => {
+    row.classList.toggle('active', parseInt(row.dataset.stationId) === id);
+  });
+  const row = stationListEl.querySelector(`[data-station-id="${id}"]`);
+  if (row) row.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
 }
 
 // ── Manual input form ──────────────────────────────────────────────────────
@@ -395,8 +416,10 @@ function recalculate() {
   const lineLength = computeLineLength(stations);
   state.stations.forEach((s, idx) => {
     const color = stationColor(idx);
-    drawStation(s.lat, s.lon, `#${s.id}`, color);
-    drawBearingLine(s.lat, s.lon, stations[idx].azimuth, lineLength, color);
+    const info = `<b>觀測站 #${s.id}</b><br>座標：${formatLatLon(s.lat, s.lon)}` +
+      `<br>方位角：${stations[idx].azimuth.toFixed(1)}°`;
+    drawStation(s.lat, s.lon, `#${s.id}`, color, s.id, info, selectStation);
+    drawBearingLine(s.lat, s.lon, stations[idx].azimuth, lineLength, color, s.id, info, selectStation);
   });
 
   if (state.stations.length < 2) return;

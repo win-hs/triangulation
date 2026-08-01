@@ -3,14 +3,17 @@
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>無線電追蹤三角定位工具</title>
+  <title>Triangulation — 三角定位工具</title>
   <meta name="description" content="無線電追蹤三角定位工具，在地圖上輸入觀測站座標與方位角，自動計算目標位置並顯示方位線與交會點。支援真北/磁北、平面/Geodesic 交會、Centroid/MLE 估算。">
   <link rel="canonical" href="https://win-hs.github.io/triangulation/">
-  <meta property="og:title" content="無線電追蹤三角定位工具">
+  <meta property="og:title" content="Triangulation：三角定位工具">
   <meta property="og:description" content="輸入觀測站座標與方位角，自動計算目標位置並視覺化顯示於地圖。">
   <meta property="og:type" content="website">
   <meta property="og:url" content="https://win-hs.github.io/triangulation/">
   <meta property="og:locale" content="zh_TW">
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Calistoga&family=Inter:wght@400;500;600;700&family=JetBrains+Mono:wght@400;500&display=swap">
 
   <!-- Leaflet -->
   <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css">
@@ -25,7 +28,6 @@
   <link rel="stylesheet" href="css/style.css">
 </head>
 <body>
-<a href="https://sites.google.com/view/fieldbox/homepage" style="position:fixed;bottom:34px;right:14px;z-index:9999;font-family:'Noto Sans TC',sans-serif;font-size:13px;font-weight:700;color:#111;background:#fff;border:1px solid #ccc;padding:6px 14px;border-radius:20px;text-decoration:none;box-shadow:0 1px 4px rgba(0,0,0,.25)">← 返回FieldBox首頁</a>
 
 <!-- ── Map (left, fills remaining width) ──────────────────────────── -->
 <div id="map">
@@ -49,8 +51,12 @@
 
   <!-- App header -->
   <div id="app-header">
-    <div id="app-title">無線電追蹤三角定位工具</div>
-    <div id="app-version">v0.1 · 2026-05-25</div>
+    <div id="app-title">Triangulation</div>
+    <div class="fb-util">
+      <a class="fb-pill" href="mailto:a.wen90@gmail.com?subject=Field-Box%20%E5%9B%9E%E5%A0%B1%EF%BC%9ATriangulation">回報問題</a>
+      <span class="fb-pill fb-pill-static"><span class="fb-dot"></span>總造訪次數 <b id="visits">--------</b></span>
+      <a class="fb-pill" href="https://sites.google.com/view/fieldbox/homepage">← 返回FieldBox首頁</a>
+    </div>
   </div>
 
   <!-- Error banner (floats above sections when visible) -->
@@ -171,6 +177,14 @@
 <script src="js/magnetic.js"></script>
 <script src="js/map.js"></script>
 <script src="js/main.js"></script>
+<script>
+(function () {
+  fetch('https://abacus.jasoncameron.dev/hit/triangulation-awen-9/live-visits')
+    .then(r => r.json())
+    .then(j => { document.getElementById('visits').textContent = String(Number(j.value)).padStart(8, '0'); })
+    .catch(() => { document.getElementById('visits').textContent = '—'; });
+})();
+</script>
 
 </body>
 </html>
