@@ -632,7 +632,11 @@ body {
   .sub-label { font-size: 12px; }
   .inline-note { font-size: 13px; }
   .result-row { font-size: 15px; }
-  /* 16px inputs stop iOS from auto-zooming on focus */
-  .station-row input, #manual-form input, .date-row input { font-size: 16px; padding: 9px 8px; }
+  /* 16px inputs stop iOS from auto-zooming on focus.
+     Must out-specify .station-row input.latlon-input above, hence the class pair. */
+  .station-row input.latlon-input,
+  .station-row input.az-input,
+  #manual-form input,
+  .date-row input { font-size: 16px; padding: 9px 8px; }
   .station-row input.az-input { width: 74px; }
 }
