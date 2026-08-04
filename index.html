@@ -185,6 +185,18 @@
 
 </div><!-- /.app-body -->
 
+<!-- Confirm dialog — in-page, because native confirm() is suppressed in some
+     in-app browsers and would make 清空 look unresponsive -->
+<div id="confirm-popup" hidden>
+  <div id="confirm-popup-inner">
+    <div id="confirm-popup-msg"></div>
+    <div class="az-popup-actions">
+      <button id="confirm-popup-cancel" class="btn-secondary">取消</button>
+      <button id="confirm-popup-ok"     class="btn-primary">確定清空</button>
+    </div>
+  </div>
+</div>
+
 <!-- App scripts -->
 <script src="js/core.js"></script>
 <script src="js/magnetic.js"></script>

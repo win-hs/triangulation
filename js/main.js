@@ -471,14 +471,38 @@ function confirmAzPopup() {
 }
 
 // ── Clear all ──────────────────────────────────────────────────────────────
+const confirmPopupEl  = document.getElementById('confirm-popup');
+const confirmMsgEl    = document.getElementById('confirm-popup-msg');
+const confirmOkBtn    = document.getElementById('confirm-popup-ok');
+const confirmCancelBtn = document.getElementById('confirm-popup-cancel');
+
 document.getElementById('btn-clear').addEventListener('click', () => {
   if (!state.stations.length) return;
-  if (!confirm(`確定要清空全部 ${state.stations.length} 個觀測點嗎？`)) return;
+  confirmMsgEl.textContent = `確定要清空全部 ${state.stations.length} 個觀測點嗎？`;
+  confirmPopupEl.hidden = false;
+  confirmCancelBtn.focus();  // destructive action must not be one stray Enter away
+});
+
+function closeConfirm() { confirmPopupEl.hidden = true; }
+
+confirmOkBtn.addEventListener('click', () => {
+  closeConfirm();
   state.stations = [];
   state.nextId = 1;
   renderStationList();
   updateDeclinationDisplay();
   recalculate();
+});
+
+confirmCancelBtn.addEventListener('click', closeConfirm);
+
+// Tapping the backdrop dismisses — dismissing is the safe direction here.
+confirmPopupEl.addEventListener('click', e => {
+  if (e.target === confirmPopupEl) closeConfirm();
+});
+
+document.addEventListener('keydown', e => {
+  if (e.key === 'Escape' && !confirmPopupEl.hidden) closeConfirm();
 });
 
 // ── Recalculate & render ───────────────────────────────────────────────────
