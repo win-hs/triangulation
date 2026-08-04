@@ -473,6 +473,7 @@ function confirmAzPopup() {
 // ── Clear all ──────────────────────────────────────────────────────────────
 document.getElementById('btn-clear').addEventListener('click', () => {
   if (!state.stations.length) return;
+  if (!confirm(`確定要清空全部 ${state.stations.length} 個觀測點嗎？`)) return;
   state.stations = [];
   state.nextId = 1;
   renderStationList();

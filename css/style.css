@@ -252,12 +252,12 @@ body {
 }
 
 .radio-btn {
-  padding: 6px 16px;
+  padding: 6px 14px;
   border: 1px solid var(--md-outline);
   background: var(--md-surface);
   color: var(--md-on-surface-var);
   font-family: inherit;
-  font-size: 13px;
+  font-size: 12px;
   font-weight: 500;
   cursor: pointer;
   white-space: nowrap;
@@ -392,21 +392,23 @@ body {
 .btn-delete:hover { background: #ffe0e0; }
 
 /* ── Action buttons ──────────────────────────────────────────────── */
+/* All four actions stay on one row, so they share the width evenly. */
 #station-actions {
   display: flex;
-  gap: 6px;
-  flex-wrap: wrap;
+  gap: 4px;
 }
 
 .btn-action {
-  padding: 7px 14px;
+  flex: 1 1 auto;
+  padding: 7px 4px;
   border: 1px solid var(--md-outline);
   border-radius: 18px;
   background: var(--md-surface);
   color: var(--md-primary);
   font-family: inherit;
-  font-size: 13px;
+  font-size: 12px;
   font-weight: 500;
+  white-space: nowrap;
   cursor: pointer;
   transition: background .15s ease;
 }
@@ -629,8 +631,8 @@ body {
   }
 
   /* Touch targets — 44px minimum */
-  .radio-btn { padding: 11px 18px; font-size: 14px; }
-  .btn-action { padding: 11px 16px; font-size: 14px; }
+  .radio-btn { padding: 11px 14px; font-size: 13px; }
+  .btn-action { padding: 11px 4px; font-size: 13px; }
   .btn-primary, .btn-secondary { height: 44px; }
   .btn-result-action { padding: 10px 16px; font-size: 13px; }
   .link-btn { padding: 8px 0; font-size: 14px; }
