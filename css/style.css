@@ -208,6 +208,8 @@ body {
 
 #confirm-popup-msg { font-size: 15px; color: var(--md-on-surface); line-height: 1.5; }
 
+#confirm-popup .az-popup-actions { justify-content: center; }
+
 /* ── Right panel ─────────────────────────────────────────────────── */
 #panel {
   width: 360px;
