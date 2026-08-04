@@ -45,14 +45,14 @@ function planarIntersect(s1, s2) {
 
   const denom = dx1 * (-dy2) - (-dx2) * dy1;
   if (Math.abs(denom) < 1e-12) {
-    throw new Error(`觀測站 #${s1.id} 與 #${s2.id} 的方位線近乎平行，無法定位`);
+    throw new Error(`觀測點 #${s1.id} 與 #${s2.id} 的方位線近乎平行，無法定位`);
   }
 
   const t = (dlon * (-dy2) - (-dx2) * dlat) / denom;
   const u = (dx1 * dlat - dlon * dy1) / denom;
 
   if (t < 0 || u < 0) {
-    throw new Error(`觀測站 #${s1.id} 與 #${s2.id} 的方位線無有效交會，請檢查角度`);
+    throw new Error(`觀測點 #${s1.id} 與 #${s2.id} 的方位線無有效交會，請檢查角度`);
   }
 
   return {
@@ -120,7 +120,7 @@ function geodesicIntersect(s1, s2) {
     }
   }
 
-  throw new Error(`觀測站 #${s1.id} 與 #${s2.id} 的方位線無有效交會，請檢查角度`);
+  throw new Error(`觀測點 #${s1.id} 與 #${s2.id} 的方位線無有效交會，請檢查角度`);
 }
 
 /**
@@ -206,7 +206,7 @@ function mleEstimate(stations, initial) {
  */
 function calculateTarget(stations, options) {
   if (stations.length < 2) {
-    throw new Error('至少需要 2 個觀測站');
+    throw new Error('至少需要 2 個觀測點');
   }
 
   const lineLength = computeLineLength(stations);
@@ -216,7 +216,7 @@ function calculateTarget(stations, options) {
     for (let j = i + 1; j < stations.length; j++) {
       const angle = acuteAngleBetween(stations[i].azimuth, stations[j].azimuth);
       if (angle < 0.5) {
-        throw new Error(`觀測站 #${stations[i].id} 與 #${stations[j].id} 的方位線近乎平行，無法定位`);
+        throw new Error(`觀測點 #${stations[i].id} 與 #${stations[j].id} 的方位線近乎平行，無法定位`);
       }
     }
   }

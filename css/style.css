@@ -239,6 +239,13 @@ body {
   align-items: flex-start;
 }
 
+/* 北向 ＋ 座標輸入順序 share one row, each with its own section title */
+.setting-col {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
 /* ── Radio button group ──────────────────────────────────────────── */
 .radio-group {
   display: flex;
@@ -285,6 +292,7 @@ body {
 .date-row {
   display: flex;
   align-items: center;
+  flex-wrap: wrap;
   gap: 8px;
   font-size: 13px;
   color: #555;
@@ -470,6 +478,7 @@ body {
 /* ── Result action buttons (copy / maps) ────────────────────────── */
 #result-actions {
   display: flex;
+  flex-wrap: wrap;
   gap: 6px;
   margin-top: 2px;
 }
@@ -488,6 +497,7 @@ body {
   display: inline-flex;
   align-items: center;
   gap: 4px;
+  white-space: nowrap;
   transition: background 0.15s;
 }
 
@@ -638,5 +648,9 @@ body {
   .station-row input.az-input,
   #manual-form input,
   .date-row input { font-size: 16px; padding: 9px 8px; }
-  .station-row input.az-input { width: 74px; }
+  /* Tighten the row's fixed-width parts so the 6-decimal coordinate fits */
+  .station-row { gap: 4px; }
+  .station-row input.latlon-input { padding-left: 6px; padding-right: 6px; }
+  .station-row input.az-input { width: 68px; }
+  .btn-delete { padding: 9px 9px; }
 }

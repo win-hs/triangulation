@@ -4,10 +4,10 @@
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <title>Triangulation：三角定位工具</title>
-  <meta name="description" content="無線電追蹤三角定位工具，在地圖上輸入觀測站座標與方位角，自動計算目標位置並顯示方位線與交會點。支援真北/磁北、平面/Geodesic 交會、Centroid/MLE 估算。">
+  <meta name="description" content="無線電追蹤三角定位工具，在地圖上輸入觀測點座標與方位角，自動計算目標位置並顯示方位線與交會點。支援真北/磁北、平面/Geodesic 交會、Centroid/MLE 估算。">
   <link rel="canonical" href="https://win-hs.github.io/triangulation/">
   <meta property="og:title" content="Triangulation：三角定位工具">
-  <meta property="og:description" content="輸入觀測站座標與方位角，自動計算目標位置並視覺化顯示於地圖。">
+  <meta property="og:description" content="輸入觀測點座標與方位角，自動計算目標位置並視覺化顯示於地圖。">
   <meta property="og:type" content="website">
   <meta property="og:url" content="https://win-hs.github.io/triangulation/">
   <meta property="og:locale" content="zh_TW">
@@ -73,32 +73,32 @@
   <!-- Error banner (floats above sections when visible) -->
   <div id="error-banner" hidden></div>
 
-  <!-- ① 北向 -->
+  <!-- ① 北向 ＋ 座標輸入順序 -->
   <div class="section">
-    <div class="section-title">北向</div>
-    <div class="control-row">
-      <div class="radio-group">
-        <button id="btn-north-true"     class="radio-btn active">真北</button>
-        <button id="btn-north-magnetic" class="radio-btn">磁北</button>
+    <div class="algo-row">
+      <div class="setting-col">
+        <div class="section-title">北向</div>
+        <div class="radio-group">
+          <button id="btn-north-true"     class="radio-btn active">真北</button>
+          <button id="btn-north-magnetic" class="radio-btn">磁北</button>
+        </div>
       </div>
-      <span id="declination-display" class="inline-note" hidden></span>
+      <div class="setting-col">
+        <div class="section-title">座標輸入順序</div>
+        <div class="radio-group">
+          <button id="btn-coord-latlon" class="radio-btn active">緯,經</button>
+          <button id="btn-coord-lonlat" class="radio-btn">經,緯</button>
+        </div>
+      </div>
     </div>
     <div id="date-label" class="date-row" hidden>
       <span>日期</span>
       <input type="date" id="date-input">
+      <span id="declination-display" class="inline-note" hidden></span>
     </div>
   </div>
 
-  <!-- ② 座標輸入順序 -->
-  <div class="section">
-    <div class="section-title">座標輸入順序</div>
-    <div class="radio-group">
-      <button id="btn-coord-latlon" class="radio-btn active">緯,經</button>
-      <button id="btn-coord-lonlat" class="radio-btn">經,緯</button>
-    </div>
-  </div>
-
-  <!-- ③ 計算方法 -->
+  <!-- ② 計算方法 -->
   <div class="section">
     <div class="section-title">計算方法</div>
     <div class="algo-row">
@@ -119,13 +119,14 @@
     </div>
   </div>
 
-  <!-- ④ 觀測站 -->
+  <!-- ③ 觀測點 -->
   <div class="section">
-    <div class="section-title">觀測站</div>
+    <div class="section-title">觀測點</div>
     <div id="station-list"></div>
     <div id="station-actions">
-      <button id="btn-add-manual" class="btn-action">＋ 手動新增</button>
+      <button id="btn-locate"     class="btn-action">📍 定位</button>
       <button id="btn-add-map"    class="btn-action">＋ 地圖點選</button>
+      <button id="btn-add-manual" class="btn-action">＋ 手動新增</button>
       <button id="btn-clear"      class="btn-action danger">清空</button>
     </div>
     <div id="manual-form" hidden>
@@ -142,7 +143,7 @@
     </div>
   </div>
 
-  <!-- ⑤ 結果 -->
+  <!-- ④ 結果 -->
   <div class="section" id="results">
     <div class="section-title">結果</div>
     <div class="result-row">
@@ -150,7 +151,8 @@
       <span class="result-value" id="result-target">—</span>
     </div>
     <div id="result-actions" hidden>
-      <button id="btn-copy-coords" class="btn-result-action">📋 複製</button>
+      <button id="btn-copy-coords" class="btn-result-action">📋 複製座標</button>
+      <button id="btn-share"       class="btn-result-action">🔗 位置分享</button>
       <a id="btn-open-maps" href="#" target="_blank" class="btn-result-action">🗺 Google Maps</a>
     </div>
     <div class="result-row">
@@ -163,7 +165,7 @@
     </div>
   </div>
 
-  <!-- ⑥ 使用說明 -->
+  <!-- ⑤ 使用說明 -->
   <div class="section" id="help-section">
     <button id="help-toggle" class="link-btn">❓ 使用說明 ▶</button>
     <dl id="help-body" hidden>
@@ -173,10 +175,8 @@
       <dd>座標輸入順序。台灣常用「緯度, 經度」（如 24.0, 120.5）；部分 GPS 設備輸出「經度, 緯度」。</dd>
       <dt>平面 / Geodesic</dt>
       <dd>平面法：緯經視為 XY，速度快，＜100 km 誤差小。Geodesic：球面大圓交會，長距離更準確。</dd>
-      <dt>MLE / Centroid</dt>
-      <dd>MLE（最大概似估計）：對方位誤差加權，精度較高。Centroid：所有交點平均，計算簡單但易受離群值影響。</dd>
-      <dt>最小銳角</dt>
-      <dd>兩方位線夾角。建議 ＞30°；角度過小時定位誤差急遽放大（三角形幾何退化）。</dd>
+      <dt>Centroid / MLE</dt>
+      <dd>Centroid：所有交點平均，計算簡單但易受離群值影響。MLE（最大概似估計）：對方位誤差加權，精度較高。</dd>
     </dl>
   </div>
 

@@ -137,7 +137,7 @@ function drawTarget(lat, lon) {
     iconAnchor: [12, 12],
   });
   L.marker([lat, lon], { icon })
-    .bindPopup(`目標: ${lat.toFixed(5)}, ${lon.toFixed(5)}`)
+    .bindPopup(`目標: ${lat.toFixed(6)}, ${lon.toFixed(6)}`)
     .addTo(overlayGroup);
 }
 
@@ -161,6 +161,13 @@ function fitToPoints(points) {
   if (!points.length) return;
   const bounds = L.latLngBounds(points.map(p => [p.lat, p.lon]));
   map.fitBounds(bounds, { padding: [40, 40] });
+}
+
+/**
+ * Center the map on a point at the given zoom.
+ */
+function centerMap(lat, lon, zoom) {
+  map.setView([lat, lon], zoom);
 }
 
 /**

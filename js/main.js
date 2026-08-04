@@ -117,6 +117,7 @@ btnCoordLatLon.addEventListener('click', () => {
   state.coordOrder = 'latlon';
   updateCoordUI();
   renderStationList(); // re-display values in new order
+  recalculate();       // result + map popups follow the same order
 });
 
 btnCoordLonLat.addEventListener('click', () => {
@@ -124,6 +125,7 @@ btnCoordLonLat.addEventListener('click', () => {
   state.coordOrder = 'lonlat';
   updateCoordUI();
   renderStationList();
+  recalculate();
 });
 
 // ── Algorithm toggles ──────────────────────────────────────────────────────
@@ -162,14 +164,63 @@ btnEstCentroid.addEventListener('click', () => {
   recalculate();
 });
 
-// ── Copy coords & Google Maps ─────────────────────────────────────────────
-document.getElementById('btn-copy-coords').addEventListener('click', () => {
-  const text = resultTargetEl.textContent;
-  navigator.clipboard.writeText(text).then(() => {
-    const btn = document.getElementById('btn-copy-coords');
-    btn.textContent = '✓ 已複製';
-    setTimeout(() => { btn.textContent = '📋 複製'; }, 1500);
-  });
+// ── Copy coords / share / Google Maps ─────────────────────────────────────
+let _shareUrl = '';
+
+function flashButton(btn, msg, restore) {
+  btn.textContent = msg;
+  setTimeout(() => { btn.textContent = restore; }, 1500);
+}
+
+// navigator.clipboard needs a secure, focused document; fall back to the
+// old execCommand trick when it refuses so copying never silently fails.
+async function copyText(text) {
+  try {
+    await navigator.clipboard.writeText(text);
+    return true;
+  } catch (e) {
+    const ta = document.createElement('textarea');
+    ta.value = text;
+    ta.style.position = 'fixed';
+    ta.style.opacity = '0';
+    document.body.appendChild(ta);
+    ta.select();
+    let ok = false;
+    try { ok = document.execCommand('copy'); } catch (e2) { ok = false; }
+    document.body.removeChild(ta);
+    return ok;
+  }
+}
+
+document.getElementById('btn-copy-coords').addEventListener('click', async () => {
+  const btn = document.getElementById('btn-copy-coords');
+  if (await copyText(resultTargetEl.textContent)) {
+    flashButton(btn, '✓ 已複製', '📋 複製座標');
+  } else {
+    showError('無法複製，請手動選取座標');
+  }
+});
+
+// Shares a Google Maps link to the target — the receiver opens it and sees the
+// point pinned on Google Maps. Uses the native share sheet on mobile, and falls
+// back to copying the link on desktop browsers without Web Share.
+document.getElementById('btn-share').addEventListener('click', async () => {
+  const btn = document.getElementById('btn-share');
+  if (!_shareUrl) return;
+  // Desktop share sheets are clunky; copying the link is the better default there.
+  if (navigator.share && matchMedia('(pointer: coarse)').matches) {
+    try {
+      await navigator.share({ title: '三角定位結果', text: `目標座標 ${resultTargetEl.textContent}`, url: _shareUrl });
+      return;
+    } catch (e) {
+      if (e.name === 'AbortError') return;  // user dismissed the share sheet
+    }
+  }
+  if (await copyText(_shareUrl)) {
+    flashButton(btn, '✓ 已複製鏈接', '🔗 位置分享');
+  } else {
+    showError('無法複製鏈接，請改用「Google Maps」按鈕開啟後分享網址');
+  }
 });
 
 // ── Angles toggle ──────────────────────────────────────────────────────────
@@ -205,7 +256,7 @@ function parseLatLon(str) {
 function formatLatLon(lat, lon) {
   const a = state.coordOrder === 'lonlat' ? lon : lat;
   const b = state.coordOrder === 'lonlat' ? lat : lon;
-  return `${a}, ${b}`;
+  return `${a.toFixed(6)}, ${b.toFixed(6)}`;
 }
 
 // ── Station management ─────────────────────────────────────────────────────
@@ -348,15 +399,49 @@ function confirmManual() {
 // ── Map-click flow with inline popup ──────────────────────────────────────
 let _pendingPick = null;
 
+function openAzPopup(lat, lon) {
+  _pendingPick = { lat, lon };
+  azPopupCoordsEl.textContent = formatLatLon(lat, lon);
+  azPopupInputEl.value = '';
+  azPopupInputEl.style.borderColor = '';
+  azPopupEl.hidden = false;
+  azPopupInputEl.focus();
+}
+
 document.getElementById('btn-add-map').addEventListener('click', () => {
-  enablePickMode(({ lat, lon }) => {
-    _pendingPick = { lat, lon };
-    azPopupCoordsEl.textContent = formatLatLon(lat, lon);
-    azPopupInputEl.value = '';
-    azPopupInputEl.style.borderColor = '';
-    azPopupEl.hidden = false;
-    azPopupInputEl.focus();
-  });
+  enablePickMode(({ lat, lon }) => openAzPopup(lat, lon));
+});
+
+// ── Locate me: add an observation point at the device's GPS position ───────
+document.getElementById('btn-locate').addEventListener('click', () => {
+  const btn = document.getElementById('btn-locate');
+  if (!navigator.geolocation) {
+    showError('此瀏覽器不支援定位功能');
+    return;
+  }
+  hideError();
+  btn.disabled = true;
+  btn.textContent = '定位中…';
+  navigator.geolocation.getCurrentPosition(
+    pos => {
+      btn.disabled = false;
+      btn.textContent = '📍 定位';
+      const { latitude, longitude } = pos.coords;
+      centerMap(latitude, longitude, 15);
+      openAzPopup(latitude, longitude);
+    },
+    err => {
+      btn.disabled = false;
+      btn.textContent = '📍 定位';
+      const msgs = {
+        1: '定位權限被拒絕，請在瀏覽器設定中允許存取位置',
+        2: '無法取得位置訊號，請確認 GPS 已開啟',
+        3: '定位逾時，請再試一次',
+      };
+      showError(msgs[err.code] || ('定位失敗：' + err.message));
+    },
+    { enableHighAccuracy: true, timeout: 15000, maximumAge: 0 }
+  );
 });
 
 azPopupConfirm.addEventListener('click', confirmAzPopup);
@@ -416,7 +501,7 @@ function recalculate() {
   const lineLength = computeLineLength(stations);
   state.stations.forEach((s, idx) => {
     const color = stationColor(idx);
-    const info = `<b>觀測站 #${s.id}</b><br>座標：${formatLatLon(s.lat, s.lon)}` +
+    const info = `<b>觀測點 #${s.id}</b><br>座標：${formatLatLon(s.lat, s.lon)}` +
       `<br>方位角：${stations[idx].azimuth.toFixed(1)}°`;
     drawStation(s.lat, s.lon, `#${s.id}`, color, s.id, info, selectStation);
     drawBearingLine(s.lat, s.lon, stations[idx].azimuth, lineLength, color, s.id, info, selectStation);
@@ -443,13 +528,12 @@ function recalculate() {
     result.target,
   ]);
 
-  const targetLatLon = `${result.target.lat.toFixed(5)}, ${result.target.lon.toFixed(5)}`;
   resultTargetEl.textContent = formatLatLon(result.target.lat, result.target.lon);
 
-  // Copy & Google Maps buttons
+  // Copy / share / Google Maps buttons
+  _shareUrl = `https://www.google.com/maps?q=${result.target.lat.toFixed(6)},${result.target.lon.toFixed(6)}`;
   document.getElementById('result-actions').hidden = false;
-  document.getElementById('btn-open-maps').href =
-    `https://www.google.com/maps?q=${result.target.lat},${result.target.lon}`;
+  document.getElementById('btn-open-maps').href = _shareUrl;
 
   const minA = result.minAcuteAngle;
   const warn = minA.value < 30;
@@ -478,6 +562,8 @@ function clearResults() {
   resultAngleEl.textContent = '—';
   resultAngleEl.className = 'result-value';
   allAnglesBodyEl.innerHTML = '';
+  _shareUrl = '';
   document.getElementById('result-actions').hidden = true;
-  document.getElementById('btn-copy-coords').textContent = '📋 複製';
+  document.getElementById('btn-copy-coords').textContent = '📋 複製座標';
+  document.getElementById('btn-share').textContent = '🔗 位置分享';
 }
