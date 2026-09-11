@@ -47,6 +47,7 @@ const azPopupCancel    = document.getElementById('az-popup-cancel');
 
 // ── Init ───────────────────────────────────────────────────────────────────
 initMap('map');
+addFitControl(fitPoints);
 dateInputEl.value = state.date;
 updateNorthUI();
 updateCoordUI();
@@ -68,9 +69,10 @@ function updateDeclinationDisplay() {
   }
   // Use average of station positions, or Taiwan center if no stations
   let lat = 23.97, lon = 121.0;
-  if (state.stations.length > 0) {
-    lat = state.stations.reduce((s, st) => s + st.lat, 0) / state.stations.length;
-    lon = state.stations.reduce((s, st) => s + st.lon, 0) / state.stations.length;
+  const active = activeStations();
+  if (active.length > 0) {
+    lat = active.reduce((s, st) => s + st.lat, 0) / active.length;
+    lon = active.reduce((s, st) => s + st.lon, 0) / active.length;
   }
   const date = state.date ? new Date(state.date) : new Date();
   const { dec } = geoMag(lat, lon, 0, date);
@@ -164,8 +166,17 @@ btnEstCentroid.addEventListener('click', () => {
   recalculate();
 });
 
-// ── Copy coords / share / Google Maps ─────────────────────────────────────
+// ── Copy coords / share / snapshot ────────────────────────────────────────
 let _shareUrl = '';
+let _lastTarget = null;
+
+// What the map's fit button frames: every checked station plus the latest
+// target, so it reproduces the view recalculate() sets automatically.
+function fitPoints() {
+  const pts = activeStations().map(s => ({ lat: s.lat, lon: s.lon }));
+  if (_lastTarget) pts.push(_lastTarget);
+  return pts;
+}
 
 function flashButton(btn, msg, restore) {
   btn.textContent = msg;
@@ -219,7 +230,145 @@ document.getElementById('btn-share').addEventListener('click', async () => {
   if (await copyText(_shareUrl)) {
     flashButton(btn, '✓ 已複製鏈接', '🔗 位置分享');
   } else {
-    showError('無法複製鏈接，請改用「Google Maps」按鈕開啟後分享網址');
+    showError('無法複製鏈接，請手動選取座標後自行分享');
+  }
+});
+
+// Builds a shareable PNG: the map view on top, and underneath every
+// observation point's coordinates/azimuth plus the target coordinates — so a
+// pasted image carries the numbers, not just a picture of the map.
+const SNAP_FONT = '"Noto Sans TC", "Microsoft JhengHei", system-ui, sans-serif';
+
+async function buildSnapshotCanvas() {
+  const mapCanvas = captureMapCanvas();
+  const stations = activeStations();
+  const pad = 14;
+  const rowH = 22;
+  const W = Math.max(mapCanvas.width, 460);
+
+  const canvas = document.createElement('canvas');
+  canvas.width = W;
+  canvas.height = mapCanvas.height + 128 + stations.length * rowH;
+  const ctx = canvas.getContext('2d');
+  ctx.fillStyle = '#fff';
+  ctx.fillRect(0, 0, canvas.width, canvas.height);
+  ctx.drawImage(mapCanvas, Math.round((W - mapCanvas.width) / 2), 0);
+
+  let y = mapCanvas.height + pad;
+  ctx.textAlign = 'left';
+  ctx.textBaseline = 'top';
+
+  ctx.fillStyle = '#5f6368';
+  ctx.font = `12px ${SNAP_FONT}`;
+  ctx.fillText('目標座標', pad, y + 6);
+  ctx.fillStyle = '#202124';
+  ctx.font = `bold 18px ${SNAP_FONT}`;
+  ctx.fillText(resultTargetEl.textContent, pad + 72, y);
+  y += 30;
+
+  ctx.fillStyle = '#5f6368';
+  ctx.font = `12px ${SNAP_FONT}`;
+  ctx.fillText('最小銳角', pad, y + 1);
+  ctx.fillStyle = resultAngleEl.classList.contains('warn') ? '#c5221f' : '#202124';
+  ctx.font = `13px ${SNAP_FONT}`;
+  ctx.fillText(resultAngleEl.textContent, pad + 72, y);
+  y += 22;
+
+  ctx.fillStyle = '#5f6368';
+  ctx.font = `12px ${SNAP_FONT}`;
+  ctx.fillText(`觀測點（${state.coordOrder === 'lonlat' ? '經,緯' : '緯,經'}）`, pad, y);
+  y += 20;
+
+  stations.forEach(s => {
+    const cy = y + rowH / 2;
+    ctx.beginPath();
+    ctx.arc(pad + 9, cy, 9, 0, Math.PI * 2);
+    ctx.fillStyle = stationColorFor(s);
+    ctx.fill();
+    ctx.textAlign = 'center';
+    ctx.textBaseline = 'middle';
+    ctx.fillStyle = '#fff';
+    ctx.font = `bold 10px ${SNAP_FONT}`;
+    ctx.fillText(String(s.id), pad + 9, cy);
+    ctx.textAlign = 'left';
+    let x = pad + 26;
+    if (s.name) {
+      ctx.fillStyle = '#202124';
+      ctx.font = `bold 13px ${SNAP_FONT}`;
+      ctx.fillText(s.name, x, cy);
+      x += ctx.measureText(s.name).width + 10;
+    }
+    ctx.fillStyle = '#202124';
+    ctx.font = `13px ${SNAP_FONT}`;
+    ctx.fillText(`${formatLatLon(s.lat, s.lon)}　方位角 ${s.azimuth.toFixed(1)}°`, x, cy);
+    ctx.textBaseline = 'top';
+    y += rowH;
+  });
+
+  y += 6;
+  ctx.strokeStyle = '#e0e0e0';
+  ctx.lineWidth = 1;
+  ctx.beginPath();
+  ctx.moveTo(pad, y + 0.5);
+  ctx.lineTo(W - pad, y + 0.5);
+  ctx.stroke();
+  y += 8;
+
+  const north = state.northMode === 'magnetic' ? `磁北（${state.date}）` : '真北';
+  const algo = state.lineAlgorithm === 'geodesic' ? 'Geodesic' : '平面';
+  const est = state.estimator === 'mle' ? 'MLE' : 'Centroid';
+  ctx.fillStyle = '#5f6368';
+  ctx.font = `11px ${SNAP_FONT}`;
+  ctx.fillText(`${north} · ${algo} · ${est}`, pad, y);
+  ctx.textAlign = 'right';
+  ctx.fillText('win-hs.github.io/triangulation', W - pad, y);
+  ctx.textAlign = 'left';
+
+  return canvas;
+}
+
+function downloadBlob(blob, filename) {
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement('a');
+  a.href = url;
+  a.download = filename;
+  document.body.appendChild(a);
+  a.click();
+  a.remove();
+  setTimeout(() => URL.revokeObjectURL(url), 1000);
+}
+
+document.getElementById('btn-copy-shot').addEventListener('click', async () => {
+  const btn = document.getElementById('btn-copy-shot');
+  btn.disabled = true;
+  btn.textContent = '產生中…';
+  // Handing ClipboardItem a promise keeps the write inside the user gesture,
+  // which Safari requires; the same promise feeds the download fallback.
+  const shot = buildSnapshotCanvas()
+    .then(c => new Promise(res => c.toBlob(res, 'image/png')));
+  let copied = false;
+  try {
+    if (navigator.clipboard && navigator.clipboard.write && window.ClipboardItem) {
+      await navigator.clipboard.write([new ClipboardItem({ 'image/png': shot })]);
+      copied = true;
+    }
+  } catch (e) {
+    copied = false;  // no clipboard permission / unsupported — fall through
+  }
+  try {
+    const blob = await shot;
+    if (!blob) throw new Error('無法產生圖片');
+    btn.disabled = false;
+    if (copied) {
+      flashButton(btn, '✓ 已複製截圖', '📸 複製截圖');
+    } else {
+      downloadBlob(blob, `triangulation-${state.date}.png`);
+      flashButton(btn, '✓ 已下載圖片', '📸 複製截圖');
+    }
+  } catch (e) {
+    btn.disabled = false;
+    btn.textContent = '📸 複製截圖';
+    showError('截圖失敗：' + e.message);
   }
 });
 
@@ -262,10 +411,26 @@ function formatLatLon(lat, lon) {
 // ── Station management ─────────────────────────────────────────────────────
 function addStation(lat, lon, azimuth) {
   const id = state.nextId++;
-  state.stations.push({ id, lat, lon, azimuth });
+  state.stations.push({ id, lat, lon, azimuth, name: '', enabled: true });
   renderStationList();
   updateDeclinationDisplay();
   recalculate();
+}
+
+// Unchecked stations are kept in the list but excluded from the map, the
+// calculation and the snapshot.
+function activeStations() {
+  return state.stations.filter(s => s.enabled);
+}
+
+// Colors follow a station's position in the full list, so unchecking one
+// doesn't recolour the rest.
+function stationColorFor(s) {
+  return stationColor(state.stations.indexOf(s));
+}
+
+function escapeHtml(str) {
+  return str.replace(/[&<>"]/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[c]));
 }
 
 function deleteStation(id) {
@@ -293,16 +458,38 @@ function updateStationAzimuth(id, value) {
   recalculate();
 }
 
+function updateStationName(id, value) {
+  const s = state.stations.find(s => s.id === id);
+  if (!s) return;
+  s.name = value.trim();
+  recalculate();  // the map label and snapshot follow the name
+}
+
+function setStationEnabled(id, enabled) {
+  const s = state.stations.find(s => s.id === id);
+  if (!s) return;
+  s.enabled = enabled;
+  const row = stationListEl.querySelector(`[data-station-id="${id}"]`);
+  if (row) row.classList.toggle('off', !enabled);
+  updateDeclinationDisplay();
+  recalculate();
+}
+
 function renderStationList() {
   const coordHint = state.coordOrder === 'lonlat' ? '經,緯' : '緯,經';
   stationListEl.innerHTML = '';
   state.stations.forEach((s, idx) => {
     const color = stationColor(idx);
     const row = document.createElement('div');
-    row.className = 'station-row';
+    row.className = 'station-row' + (s.enabled ? '' : ' off');
     row.dataset.stationId = s.id;
     row.innerHTML = `
+      <input type="checkbox" class="station-toggle" title="取消勾選即從地圖與計算中排除"
+             ${s.enabled ? 'checked' : ''} data-id="${s.id}">
       <span class="station-badge" style="background:${color}" title="在地圖上定位這一站">#${s.id}</span>
+      <input type="text" class="name-input" placeholder="名稱" title="名稱（選填）"
+             value="${escapeHtml(s.name)}"
+             data-id="${s.id}" data-role="name">
       <input type="text" class="latlon-input"
              value="${formatLatLon(s.lat, s.lon)}"
              placeholder="${coordHint}"
@@ -316,14 +503,23 @@ function renderStationList() {
     stationListEl.appendChild(row);
   });
 
-  stationListEl.querySelectorAll('input').forEach(input => {
+  stationListEl.querySelectorAll('input[data-role]').forEach(input => {
     input.addEventListener('change', e => {
       const id = parseInt(e.target.dataset.id);
-      if (e.target.dataset.role === 'latlon') {
+      const role = e.target.dataset.role;
+      if (role === 'latlon') {
         updateStationLatLon(id, e.target.value);
+      } else if (role === 'name') {
+        updateStationName(id, e.target.value);
       } else {
         updateStationAzimuth(id, e.target.value);
       }
+    });
+  });
+
+  stationListEl.querySelectorAll('.station-toggle').forEach(box => {
+    box.addEventListener('change', e => {
+      setStationEnabled(parseInt(e.target.dataset.id), e.target.checked);
     });
   });
 
@@ -511,12 +707,13 @@ function recalculate() {
   hideError();
   clearResults();
 
-  if (state.stations.length === 0) return;
+  const active = activeStations();
+  if (active.length === 0) return;
 
-  let stations = state.stations;
+  let stations = active;
   if (state.northMode === 'magnetic') {
     try {
-      stations = applyMagneticCorrection(state.stations, state.date);
+      stations = applyMagneticCorrection(active, state.date);
     } catch (e) {
       showError('磁偏角計算失敗：' + e.message);
       return;
@@ -524,15 +721,17 @@ function recalculate() {
   }
 
   const lineLength = computeLineLength(stations);
-  state.stations.forEach((s, idx) => {
-    const color = stationColor(idx);
-    const info = `<b>觀測點 #${s.id}</b><br>座標：${formatLatLon(s.lat, s.lon)}` +
+  active.forEach((s, idx) => {
+    const color = stationColorFor(s);
+    const nameHtml = s.name ? escapeHtml(s.name) : '';
+    const info = `<b>觀測點 #${s.id}${nameHtml ? ' ' + nameHtml : ''}</b>` +
+      `<br>座標：${formatLatLon(s.lat, s.lon)}` +
       `<br>方位角：${stations[idx].azimuth.toFixed(1)}°`;
-    drawStation(s.lat, s.lon, `#${s.id}`, color, s.id, info, selectStation);
+    drawStation(s.lat, s.lon, `#${s.id}`, color, s.id, info, selectStation, nameHtml);
     drawBearingLine(s.lat, s.lon, stations[idx].azimuth, lineLength, color, s.id, info, selectStation);
   });
 
-  if (state.stations.length < 2) return;
+  if (active.length < 2) return;
 
   let result;
   try {
@@ -549,16 +748,16 @@ function recalculate() {
   result.pairIntersections.forEach(p => drawIntersection(p.lat, p.lon));
 
   fitToPoints([
-    ...state.stations.map(s => ({ lat: s.lat, lon: s.lon })),
+    ...active.map(s => ({ lat: s.lat, lon: s.lon })),
     result.target,
   ]);
 
   resultTargetEl.textContent = formatLatLon(result.target.lat, result.target.lon);
+  _lastTarget = result.target;
 
-  // Copy / share / Google Maps buttons
+  // Copy / share / snapshot buttons
   _shareUrl = `https://www.google.com/maps?q=${result.target.lat.toFixed(6)},${result.target.lon.toFixed(6)}`;
   document.getElementById('result-actions').hidden = false;
-  document.getElementById('btn-open-maps').href = _shareUrl;
 
   const minA = result.minAcuteAngle;
   const warn = minA.value < 30;
@@ -588,7 +787,9 @@ function clearResults() {
   resultAngleEl.className = 'result-value';
   allAnglesBodyEl.innerHTML = '';
   _shareUrl = '';
+  _lastTarget = null;
   document.getElementById('result-actions').hidden = true;
   document.getElementById('btn-copy-coords').textContent = '📋 複製座標';
   document.getElementById('btn-share').textContent = '🔗 位置分享';
+  document.getElementById('btn-copy-shot').textContent = '📸 複製截圖';
 }

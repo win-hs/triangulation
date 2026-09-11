@@ -212,7 +212,9 @@ body {
 
 /* ── Right panel ─────────────────────────────────────────────────── */
 #panel {
-  width: 360px;
+  /* 400, not 360: a station row only fits on one line if the 6-decimal
+     coordinate field keeps ~150px after the checkbox, badge, name and azimuth. */
+  width: 400px;
   flex-shrink: 0;
   background: var(--md-surface);
   border-left: 1px solid var(--md-outline);
@@ -350,11 +352,38 @@ body {
   gap: 6px;
 }
 
+/* One station per row: checkbox, badge, name, coordinates, azimuth, delete.
+   Wraps only when the viewport cannot hold it (mobile). */
 .station-row {
   display: flex;
   align-items: center;
-  gap: 6px;
+  gap: 3px;
+  flex-wrap: wrap;
 }
+
+.station-toggle {
+  width: 15px;
+  height: 15px;
+  flex-shrink: 0;
+  cursor: pointer;
+  accent-color: var(--md-primary);
+}
+
+/* Names are short field codes ("棱線點", "溪床"), so a narrow box leaves the
+   width where it is needed — the 6-decimal coordinate. */
+.station-row input.name-input {
+  width: 56px;
+  flex: 0 0 auto;
+  padding: 4px 5px;
+  border: 1px solid #ccc;
+  border-radius: 4px;
+  font-size: 13px;
+  min-width: 0;
+}
+
+/* Unchecked: excluded from map and calculation, so grey it out — but leave
+   the checkbox itself at full strength so it is obvious how to bring it back. */
+.station-row.off > *:not(.station-toggle) { opacity: .42; }
 
 .station-badge {
   width: 26px;
@@ -383,7 +412,7 @@ body {
 
 .station-row input.latlon-input {
   flex: 1;
-  padding: 4px 6px;
+  padding: 4px 5px;
   border: 1px solid #ccc;
   border-radius: 4px;
   font-size: 13px;
@@ -391,7 +420,7 @@ body {
 }
 
 .station-row input.az-input {
-  width: 60px;
+  width: 56px;
   padding: 4px 5px;
   border: 1px solid #ccc;
   border-radius: 4px;
@@ -406,7 +435,7 @@ body {
 }
 
 .btn-delete {
-  padding: 3px 7px;
+  padding: 3px 5px;
   border: 1px solid #e88;
   border-radius: 4px;
   background: #fff0f0;
@@ -625,6 +654,31 @@ body {
   box-shadow: 0 1px 4px rgba(0,0,0,0.4);
 }
 
+/* "Fit everything in view" button, stacked under Leaflet's zoom control. */
+.leaflet-bar a.fit-control {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+.fit-control svg { width: 17px; height: 17px; fill: #333; }
+
+/* Name caption beside a station marker. The heavy white halo is what keeps it
+   readable on satellite imagery, where plain dark text disappears. */
+.station-label {
+  position: absolute;
+  left: 34px;
+  top: 5px;
+  white-space: nowrap;
+  font-size: 14px;
+  font-weight: 700;
+  color: #202124;
+  text-shadow:
+    -2px -2px 3px #fff,  2px -2px 3px #fff,
+    -2px  2px 3px #fff,  2px  2px 3px #fff,
+     0 0 5px #fff, 0 0 7px #fff;
+  pointer-events: none;
+}
+
 .target-marker {
   width: 24px;
   height: 24px;
@@ -675,6 +729,7 @@ body {
      Must out-specify .station-row input.latlon-input above, hence the class pair. */
   .station-row input.latlon-input,
   .station-row input.az-input,
+  .station-row input.name-input,
   #manual-form input,
   .date-row input { font-size: 16px; padding: 9px 8px; }
   /* Tighten the row's fixed-width parts so the 6-decimal coordinate fits */
@@ -682,4 +737,8 @@ body {
   .station-row input.latlon-input { padding-left: 6px; padding-right: 6px; }
   .station-row input.az-input { width: 68px; }
   .btn-delete { padding: 9px 9px; }
+  .station-toggle { width: 20px; height: 20px; }
+  /* 16px inputs can't share one line here, so the row wraps; keep the name
+     box from stealing the wrapped line's width. */
+  .station-row input.name-input { width: 74px; }
 }

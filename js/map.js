@@ -8,18 +8,23 @@ const PALETTE = [
   '#9c755f', '#bab0ac',
 ];
 
+// crossOrigin lets captureMapCanvas() read the tiles back out of the DOM —
+// without it the snapshot canvas is tainted and cannot be exported as PNG.
+// All three tile hosts send Access-Control-Allow-Origin: *.
 const BASE_LAYERS = {
   'OpenStreetMap': L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
     attribution: '© OpenStreetMap contributors',
     maxZoom: 19,
+    crossOrigin: 'anonymous',
   }),
   'OpenTopoMap': L.tileLayer('https://{s}.tile.opentopomap.org/{z}/{x}/{y}.png', {
     attribution: '© OpenTopoMap contributors',
     maxZoom: 17,
+    crossOrigin: 'anonymous',
   }),
   'Esri Imagery': L.tileLayer(
     'https://server.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer/tile/{z}/{y}/{x}',
-    { attribution: '© Esri', maxZoom: 19 }
+    { attribution: '© Esri', maxZoom: 19, crossOrigin: 'anonymous' }
   ),
 };
 
@@ -61,11 +66,14 @@ function clearOverlays() {
  * Draw station marker with label. If stationId/onSelect given, the marker
  * becomes clickable: shows an info popup and notifies onSelect(stationId)
  * so the UI can highlight the matching row in the station list.
+ * nameHtml, when given, is drawn as a halo'd caption beside the marker;
+ * like infoHtml it is pre-escaped by the caller.
  */
-function drawStation(lat, lon, label, color, stationId, infoHtml, onSelect) {
+function drawStation(lat, lon, label, color, stationId, infoHtml, onSelect, nameHtml) {
   const icon = L.divIcon({
     className: '',
-    html: `<div class="station-marker" style="background:${color}">${label}</div>`,
+    html: `<div class="station-marker" style="background:${color}">${label}</div>` +
+      (nameHtml ? `<span class="station-label">${nameHtml}</span>` : ''),
     iconSize: [28, 28],
     iconAnchor: [14, 14],
   });
@@ -159,8 +167,37 @@ function drawIntersection(lat, lon) {
  */
 function fitToPoints(points) {
   if (!points.length) return;
+  // A single point has no extent — fitBounds would slam to max zoom.
+  if (points.length === 1) {
+    map.setView([points[0].lat, points[0].lon], 14);
+    return;
+  }
   const bounds = L.latLngBounds(points.map(p => [p.lat, p.lon]));
   map.fitBounds(bounds, { padding: [40, 40] });
+}
+
+/**
+ * Add a "fit everything in view" button under the zoom control. getPoints()
+ * supplies the stations and target to frame. The map auto-fits on every
+ * recalculation, so this is the way back after panning or zooming by hand.
+ */
+function addFitControl(getPoints) {
+  const Fit = L.Control.extend({
+    options: { position: 'topleft' },
+    onAdd() {
+      const div = L.DomUtil.create('div', 'leaflet-bar leaflet-control');
+      const a = L.DomUtil.create('a', 'fit-control', div);
+      a.href = '#';
+      a.title = '縮放到剛好看得見全部觀測點與目標';
+      a.setAttribute('role', 'button');
+      a.innerHTML = '<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M15.5 14h-.79l-.28-.27A6.47 6.47 0 0 0 16 9.5 6.5 6.5 0 1 0 9.5 16c1.61 0 3.09-.59 4.23-1.57l.27.28v.79l5 4.99L20.49 19l-4.99-5zm-6 0C7.01 14 5 11.99 5 9.5S7.01 5 9.5 5 14 7.01 14 9.5 11.99 14 9.5 14z"/></svg>';
+      L.DomEvent.disableClickPropagation(div);
+      L.DomEvent.on(a, 'click', L.DomEvent.stop);
+      L.DomEvent.on(a, 'click', () => fitToPoints(getPoints()));
+      return div;
+    },
+  });
+  new Fit().addTo(map);
 }
 
 /**
@@ -179,4 +216,115 @@ function enablePickMode(callback) {
     map.getContainer().style.cursor = '';
     callback({ lat: e.latlng.lat, lon: e.latlng.lng });
   });
+}
+
+/**
+ * Rasterise the current map view into a canvas: base tiles, then the vector
+ * overlay (bearing lines, intersection dots), then the station/target
+ * markers redrawn from their DOM positions. Used by the snapshot button.
+ */
+function captureMapCanvas() {
+  const container = map.getContainer();
+  const box = container.getBoundingClientRect();
+  const canvas = document.createElement('canvas');
+  canvas.width = Math.round(box.width);
+  canvas.height = Math.round(box.height);
+  const ctx = canvas.getContext('2d');
+  ctx.fillStyle = '#e8e8e8';
+  ctx.fillRect(0, 0, canvas.width, canvas.height);
+
+  // Tiles. Leaflet keeps one container per zoom level while zooming; paint
+  // them in z-index order so the current level lands on top.
+  const levels = Array.from(container.querySelectorAll('.leaflet-tile-container'))
+    .sort((a, b) => (parseInt(a.style.zIndex) || 0) - (parseInt(b.style.zIndex) || 0));
+  levels.forEach(level => {
+    level.querySelectorAll('img.leaflet-tile-loaded').forEach(img => {
+      const r = img.getBoundingClientRect();
+      try {
+        ctx.drawImage(img, r.left - box.left, r.top - box.top, r.width, r.height);
+      } catch (e) { /* tile not decodable — leave the background showing */ }
+    });
+  });
+
+  // Bearing lines and intersection dots. Redrawn through Leaflet's own
+  // projection rather than by rasterising the SVG pane: that pane carries its
+  // own transform and viewBox, which get applied a second time when it is
+  // serialised into a standalone image, shifting every line off the markers.
+  overlayGroup.eachLayer(layer => {
+    const o = layer.options;
+    if (o.opacity === 0) return;  // the invisible wide click-target line
+    ctx.globalAlpha = o.opacity == null ? 1 : o.opacity;
+    ctx.lineWidth = o.weight;
+    ctx.strokeStyle = o.color;
+    if (layer instanceof L.CircleMarker) {
+      const p = map.latLngToContainerPoint(layer.getLatLng());
+      ctx.beginPath();
+      ctx.arc(p.x, p.y, o.radius, 0, Math.PI * 2);
+      ctx.globalAlpha = o.fillOpacity;
+      ctx.fillStyle = o.fillColor;
+      ctx.fill();
+      ctx.globalAlpha = o.opacity == null ? 1 : o.opacity;
+      ctx.stroke();
+    } else if (layer instanceof L.Polyline) {
+      ctx.beginPath();
+      layer.getLatLngs().forEach((ll, i) => {
+        const p = map.latLngToContainerPoint(ll);
+        if (i) ctx.lineTo(p.x, p.y); else ctx.moveTo(p.x, p.y);
+      });
+      ctx.lineJoin = 'round';
+      ctx.stroke();
+    }
+    ctx.globalAlpha = 1;
+  });
+
+  // Markers are divIcons (HTML), so redraw them rather than rasterising DOM.
+  container.querySelectorAll('.station-marker, .target-marker').forEach(el => {
+    const r = el.getBoundingClientRect();
+    const cx = r.left - box.left + r.width / 2;
+    const cy = r.top - box.top + r.height / 2;
+    ctx.textAlign = 'center';
+    ctx.textBaseline = 'middle';
+    if (el.classList.contains('target-marker')) {
+      const d = 8;
+      ctx.lineCap = 'round';
+      [['#fff', 6], ['#e00', 3]].forEach(([color, width]) => {
+        ctx.strokeStyle = color;
+        ctx.lineWidth = width;
+        ctx.beginPath();
+        ctx.moveTo(cx - d, cy - d); ctx.lineTo(cx + d, cy + d);
+        ctx.moveTo(cx + d, cy - d); ctx.lineTo(cx - d, cy + d);
+        ctx.stroke();
+      });
+    } else {
+      ctx.beginPath();
+      ctx.arc(cx, cy, r.width / 2 - 1, 0, Math.PI * 2);
+      ctx.fillStyle = el.style.background || '#555';
+      ctx.fill();
+      ctx.strokeStyle = 'rgba(0,0,0,0.3)';
+      ctx.lineWidth = 2;
+      ctx.stroke();
+      ctx.fillStyle = '#fff';
+      ctx.font = 'bold 11px "Noto Sans TC", system-ui, sans-serif';
+      ctx.fillText(el.textContent, cx, cy);
+    }
+  });
+
+  // Station name captions, with the same white halo the map uses so they stay
+  // readable over satellite imagery.
+  ctx.textAlign = 'left';
+  ctx.textBaseline = 'middle';
+  ctx.font = 'bold 14px "Noto Sans TC", system-ui, sans-serif';
+  ctx.lineJoin = 'round';
+  container.querySelectorAll('.station-label').forEach(el => {
+    const r = el.getBoundingClientRect();
+    const x = r.left - box.left;
+    const y = r.top - box.top + r.height / 2;
+    ctx.lineWidth = 4;
+    ctx.strokeStyle = '#fff';
+    ctx.strokeText(el.textContent, x, y);
+    ctx.fillStyle = '#202124';
+    ctx.fillText(el.textContent, x, y);
+  });
+
+  return canvas;
 }
