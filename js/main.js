@@ -21,6 +21,11 @@ const state = {
 // groupId -> { target, minAcuteAngle, allPairAngles } or { error }
 let results = new Map();
 
+// Deleting takes two steps — select a row, then press 刪除 in that group's
+// action bar. A per-row ✕ sat right beside the azimuth field and was being
+// hit by accident.
+let _selected = null;  // { groupId, stationId }
+
 function todayISO() {
   return new Date().toISOString().slice(0, 10);
 }
@@ -658,7 +663,6 @@ function stationRowHtml(group, s, coordHint) {
       <span class="az-label">°</span>
       <input type="number" class="az-input" step="0.1" min="0" max="360"
              value="${s.azimuth}" data-role="azimuth">
-      <button class="btn-delete" data-act="del-station">✕</button>
     </div>`;
 }
 
@@ -700,11 +704,15 @@ function renderGroupList() {
           <button class="btn-action" data-act="locate">📍 定位</button>
           <button class="btn-action" data-act="pick">＋ 地圖點選</button>
           <button class="btn-action" data-act="manual">＋ 手動新增</button>
+          <button class="btn-action danger" data-act="del-station"
+                  title="刪除選取的觀測點" disabled>刪除</button>
           <button class="btn-action danger" data-act="clear">清空</button>
         </div>
       </div>`;
     groupListEl.appendChild(card);
   });
+
+  applySelection();  // rows were rebuilt, so restore the highlight and 刪除 state
 }
 
 // One delegated listener for the whole group list — the cards are rebuilt on
@@ -737,22 +745,36 @@ groupListEl.addEventListener('click', e => {
   const row = e.target.closest('.station-row');
   const act = e.target.closest('[data-act]');
 
+  // Touching a row anywhere makes it the one 刪除 acts on.
+  if (row) selectStation(groupId, parseInt(row.dataset.stationId), false);
+
   if (e.target.classList.contains('station-badge')) {
-    const stationId = parseInt(row.dataset.stationId);
-    selectStation(groupId, stationId);
-    focusStation(stationKey(groupId, stationId));
+    focusStation(stationKey(groupId, parseInt(row.dataset.stationId)));
     return;
   }
   if (!act) return;
   switch (act.dataset.act) {
     case 'collapse':    toggleGroupCollapsed(groupId); break;
     case 'del-group':   confirmDeleteGroup(groupId); break;
-    case 'del-station': deleteStation(groupId, parseInt(row.dataset.stationId)); break;
+    case 'del-station':
+      if (_selected && _selected.groupId === groupId) {
+        deleteStation(groupId, _selected.stationId);
+      }
+      break;
     case 'locate':      locateInto(groupId); break;
     case 'pick':        enablePickMode(({ lat, lon }) => openAzPopup(groupId, lat, lon)); break;
     case 'manual':      openManualForm(groupId); break;
     case 'clear':       confirmClearGroup(groupId); break;
   }
+});
+
+// Tabbing or tapping into a field selects its row too, so 刪除 always acts on
+// the row the user is actually working in.
+groupListEl.addEventListener('focusin', e => {
+  const row = e.target.closest('.station-row');
+  if (!row) return;
+  selectStation(parseInt(row.closest('.group-card').dataset.groupId),
+    parseInt(row.dataset.stationId), false);
 });
 
 document.getElementById('btn-add-group').addEventListener('click', () => addGroup());
@@ -781,14 +803,32 @@ function stationKey(groupId, stationId) {
   return `${groupId}:${stationId}`;
 }
 
-function selectStation(groupId, stationId) {
-  groupListEl.querySelectorAll('.station-row').forEach(row => row.classList.remove('active'));
-  const row = groupListEl.querySelector(
-    `[data-group-id="${groupId}"] [data-station-id="${stationId}"]`);
-  if (row) {
-    row.classList.add('active');
-    row.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
+function selectStation(groupId, stationId, scroll) {
+  _selected = { groupId, stationId };
+  applySelection();
+  if (scroll !== false) {
+    const row = stationRowEl(groupId, stationId);
+    if (row) row.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
   }
+}
+
+function stationRowEl(groupId, stationId) {
+  return groupListEl.querySelector(
+    `[data-group-id="${groupId}"] [data-station-id="${stationId}"]`);
+}
+
+// Re-applied after every render, since the rows are rebuilt each time.
+function applySelection() {
+  if (_selected && !findStation(_selected.groupId, _selected.stationId)) _selected = null;
+  groupListEl.querySelectorAll('.station-row').forEach(row => row.classList.remove('active'));
+  if (_selected) {
+    const row = stationRowEl(_selected.groupId, _selected.stationId);
+    if (row) row.classList.add('active');
+  }
+  groupListEl.querySelectorAll('.group-card').forEach(card => {
+    const btn = card.querySelector('[data-act="del-station"]');
+    if (btn) btn.disabled = !_selected || _selected.groupId !== parseInt(card.dataset.groupId);
+  });
 }
 
 // ── Adding stations: manual form, map pick, locate ────────────────────────

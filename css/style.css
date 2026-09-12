@@ -604,6 +604,13 @@ body {
 .btn-action:hover { background: rgba(26,115,232,.08); }
 .btn-action:active { background: rgba(26,115,232,.16); }
 
+/* 刪除 stays visibly out of reach until a row is selected. */
+.btn-action:disabled {
+  opacity: .38;
+  cursor: default;
+  background: var(--md-surface);
+}
+
 .btn-action.danger {
   border-color: var(--md-outline);
   color: var(--md-error);
