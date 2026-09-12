@@ -883,7 +883,10 @@ body {
   }
 
   /* Touch targets — 44px minimum */
-  .radio-btn { padding: 11px 14px; font-size: 13px; }
+  /* The settings are glanced at far more often than tapped, so they keep the
+     desktop's compact size rather than the 44px touch target the action
+     buttons below get. */
+  .radio-btn { padding: 5px 11px; font-size: 12px; }
   .switch { width: 46px; height: 26px; border-radius: 13px; }
   .switch-thumb { width: 22px; height: 22px; }
   .switch.on .switch-thumb { transform: translateX(20px); }
