@@ -3,29 +3,32 @@
 'use strict';
 
 // ── State ──────────────────────────────────────────────────────────────────
+// A group is one animal being tracked: its own observation points, its own
+// target. Groups are drawn and calculated independently, and both the group
+// and each station inside it can be unchecked to drop out of everything.
 const state = {
-  stations: [],
-  nextId: 1,
+  groups: [],               // { id, name, enabled, collapsed, showAngles, nextStationId, stations[] }
+  nextGroupId: 1,
+  multiGroup: false,        // off = the pre-groups single-list behaviour
   northMode: 'true',        // 'true' | 'magnetic'
   coordOrder: 'latlon',     // 'latlon' | 'lonlat'
   lineAlgorithm: 'planar',  // 'planar' | 'geodesic'
   estimator: 'centroid',    // 'mle' | 'centroid'
   date: todayISO(),
-  showAllAngles: false,
   showHelp: false,
 };
+
+// groupId -> { target, minAcuteAngle, allPairAngles } or { error }
+let results = new Map();
 
 function todayISO() {
   return new Date().toISOString().slice(0, 10);
 }
 
 // ── DOM refs ───────────────────────────────────────────────────────────────
-const stationListEl    = document.getElementById('station-list');
+const groupListEl      = document.getElementById('group-list');
+const resultListEl     = document.getElementById('result-list');
 const errorBannerEl    = document.getElementById('error-banner');
-const resultTargetEl   = document.getElementById('result-target');
-const resultAngleEl    = document.getElementById('result-min-angle');
-const allAnglesEl      = document.getElementById('all-angles');
-const allAnglesBodyEl  = document.getElementById('all-angles-body');
 const dateInputEl      = document.getElementById('date-input');
 const dateLabelEl      = document.getElementById('date-label');
 const declEl           = document.getElementById('declination-display');
@@ -38,6 +41,7 @@ const btnLinePlanar    = document.getElementById('btn-line-planar');
 const btnLineGeodesic  = document.getElementById('btn-line-geodesic');
 const btnEstMle        = document.getElementById('btn-est-mle');
 const btnEstCentroid   = document.getElementById('btn-est-centroid');
+const swMultiGroup     = document.getElementById('sw-multi-group');
 
 const azPopupEl        = document.getElementById('az-popup');
 const azPopupCoordsEl  = document.getElementById('az-popup-coords');
@@ -52,6 +56,8 @@ dateInputEl.value = state.date;
 updateNorthUI();
 updateCoordUI();
 updateAlgoUI();
+updateMultiGroupUI();
+addGroup();  // start with one group so the buttons are there to use
 
 // ── North toggle ───────────────────────────────────────────────────────────
 function updateNorthUI() {
@@ -69,7 +75,7 @@ function updateDeclinationDisplay() {
   }
   // Use average of station positions, or Taiwan center if no stations
   let lat = 23.97, lon = 121.0;
-  const active = activeStations();
+  const active = activeGroups().flatMap(activeStationsIn);
   if (active.length > 0) {
     lat = active.reduce((s, st) => s + st.lat, 0) / active.length;
     lon = active.reduce((s, st) => s + st.lon, 0) / active.length;
@@ -118,15 +124,15 @@ btnCoordLatLon.addEventListener('click', () => {
   if (state.coordOrder === 'latlon') return;
   state.coordOrder = 'latlon';
   updateCoordUI();
-  renderStationList(); // re-display values in new order
-  recalculate();       // result + map popups follow the same order
+  renderGroupList();  // re-display values in new order
+  recalculate();      // result + map popups follow the same order
 });
 
 btnCoordLonLat.addEventListener('click', () => {
   if (state.coordOrder === 'lonlat') return;
   state.coordOrder = 'lonlat';
   updateCoordUI();
-  renderStationList();
+  renderGroupList();
   recalculate();
 });
 
@@ -167,15 +173,20 @@ btnEstCentroid.addEventListener('click', () => {
 });
 
 // ── Copy coords / share / snapshot ────────────────────────────────────────
-let _shareUrl = '';
-let _lastTarget = null;
-
-// What the map's fit button frames: every checked station plus the latest
-// target, so it reproduces the view recalculate() sets automatically.
+// What the map's fit button frames: every checked station of every checked
+// group plus their targets, so it reproduces the view recalculate() sets.
 function fitPoints() {
-  const pts = activeStations().map(s => ({ lat: s.lat, lon: s.lon }));
-  if (_lastTarget) pts.push(_lastTarget);
+  const pts = [];
+  activeGroups().forEach(g => {
+    activeStationsIn(g).forEach(s => pts.push({ lat: s.lat, lon: s.lon }));
+    const r = results.get(g.id);
+    if (r && r.target) pts.push(r.target);
+  });
   return pts;
+}
+
+function shareUrlFor(target) {
+  return `https://www.google.com/maps?q=${target.lat.toFixed(6)},${target.lon.toFixed(6)}`;
 }
 
 function flashButton(btn, msg, restore) {
@@ -203,34 +214,57 @@ async function copyText(text) {
   }
 }
 
-document.getElementById('btn-copy-coords').addEventListener('click', async () => {
-  const btn = document.getElementById('btn-copy-coords');
-  if (await copyText(resultTargetEl.textContent)) {
-    flashButton(btn, '✓ 已複製', '📋 複製座標');
-  } else {
-    showError('無法複製，請手動選取座標');
-  }
-});
+// Per-group copy and share, delegated because the result list is rebuilt on
+// every recalculation. Share puts the group's own target on Google Maps —
+// one link pins one point, which is why it lives per group and not globally.
+resultListEl.addEventListener('click', async e => {
+  const act = e.target.closest('[data-act]');
+  if (!act) return;
+  const group = findGroup(parseInt(act.closest('.result-group').dataset.groupId));
+  const r = group && results.get(group.id);
+  if (!r || !r.target) return;
 
-// Shares a Google Maps link to the target — the receiver opens it and sees the
-// point pinned on Google Maps. Uses the native share sheet on mobile, and falls
-// back to copying the link on desktop browsers without Web Share.
-document.getElementById('btn-share').addEventListener('click', async () => {
-  const btn = document.getElementById('btn-share');
-  if (!_shareUrl) return;
-  // Desktop share sheets are clunky; copying the link is the better default there.
-  if (navigator.share && matchMedia('(pointer: coarse)').matches) {
-    try {
-      await navigator.share({ title: '三角定位結果', text: `目標座標 ${resultTargetEl.textContent}`, url: _shareUrl });
-      return;
-    } catch (e) {
-      if (e.name === 'AbortError') return;  // user dismissed the share sheet
+  if (act.dataset.act === 'copy') {
+    if (await copyText(formatLatLon(r.target.lat, r.target.lon))) {
+      flashButton(act, '✓ 已複製', '📋 複製座標');
+    } else {
+      showError('無法複製，請手動選取座標');
     }
+    return;
   }
-  if (await copyText(_shareUrl)) {
-    flashButton(btn, '✓ 已複製鏈接', '🔗 位置分享');
-  } else {
-    showError('無法複製鏈接，請手動選取座標後自行分享');
+
+  if (act.dataset.act === 'share') {
+    const url = shareUrlFor(r.target);
+    // Desktop share sheets are clunky; copying the link is the better default there.
+    if (navigator.share && matchMedia('(pointer: coarse)').matches) {
+      try {
+        await navigator.share({
+          title: `三角定位結果 ${groupLabel(group)}`,
+          text: `${groupLabel(group)} 目標座標 ${formatLatLon(r.target.lat, r.target.lon)}`,
+          url,
+        });
+        return;
+      } catch (err) {
+        if (err.name === 'AbortError') return;  // user dismissed the share sheet
+      }
+    }
+    if (await copyText(url)) {
+      flashButton(act, '✓ 已複製鏈接', '🔗 位置分享');
+    } else {
+      showError('無法複製鏈接，請手動選取座標後自行分享');
+    }
+    return;
+  }
+
+  if (act.dataset.act === 'shot') {
+    captureSnapshot(act, () => buildSnapshotFor(group),
+      `triangulation-${groupLabel(group)}-${state.date}.png`);
+    return;
+  }
+
+  if (act.dataset.act === 'angles') {
+    group.showAngles = !group.showAngles;
+    renderResults();
   }
 });
 
@@ -239,16 +273,42 @@ document.getElementById('btn-share').addEventListener('click', async () => {
 // pasted image carries the numbers, not just a picture of the map.
 const SNAP_FONT = '"Noto Sans TC", "Microsoft JhengHei", system-ui, sans-serif';
 
-async function buildSnapshotCanvas() {
+// Only checked groups, and inside them only checked stations, reach the image.
+function snapshotSections(groups) {
+  return (groups || activeGroups()).map(g => ({
+    group: g,
+    stations: activeStationsIn(g),
+    result: results.get(g.id),
+  })).filter(sec => sec.stations.length > 0);
+}
+
+// A single group's snapshot shows only that group's lines and target. The map
+// view is left alone — only the overlays are swapped, so no tiles need to
+// reload and the image frames whatever the user is already looking at.
+async function buildSnapshotFor(group) {
+  drawGroups([group]);
+  try {
+    return await buildSnapshotCanvas([group]);
+  } finally {
+    drawGroups(activeGroups());
+  }
+}
+
+async function buildSnapshotCanvas(groups) {
   const mapCanvas = captureMapCanvas();
-  const stations = activeStations();
+  const sections = snapshotSections(groups);
   const pad = 14;
   const rowH = 22;
+  const headH = 46;       // group name + target line
   const W = Math.max(mapCanvas.width, 460);
+
+  const nameH = state.multiGroup ? 20 : 0;
+  const panelH = pad * 2 + 34 +
+    sections.reduce((h, sec) => h + nameH + headH + 18 + sec.stations.length * rowH + 10, 0);
 
   const canvas = document.createElement('canvas');
   canvas.width = W;
-  canvas.height = mapCanvas.height + 128 + stations.length * rowH;
+  canvas.height = mapCanvas.height + panelH;
   const ctx = canvas.getContext('2d');
   ctx.fillStyle = '#fff';
   ctx.fillRect(0, 0, canvas.width, canvas.height);
@@ -258,54 +318,87 @@ async function buildSnapshotCanvas() {
   ctx.textAlign = 'left';
   ctx.textBaseline = 'top';
 
-  ctx.fillStyle = '#5f6368';
-  ctx.font = `12px ${SNAP_FONT}`;
-  ctx.fillText('目標座標', pad, y + 6);
-  ctx.fillStyle = '#202124';
-  ctx.font = `bold 18px ${SNAP_FONT}`;
-  ctx.fillText(resultTargetEl.textContent, pad + 72, y);
-  y += 30;
+  sections.forEach((sec, i) => {
+    const { group, stations, result } = sec;
+    const color = groupColor(group);
 
-  ctx.fillStyle = '#5f6368';
-  ctx.font = `12px ${SNAP_FONT}`;
-  ctx.fillText('最小銳角', pad, y + 1);
-  ctx.fillStyle = resultAngleEl.classList.contains('warn') ? '#c5221f' : '#202124';
-  ctx.font = `13px ${SNAP_FONT}`;
-  ctx.fillText(resultAngleEl.textContent, pad + 72, y);
-  y += 22;
-
-  ctx.fillStyle = '#5f6368';
-  ctx.font = `12px ${SNAP_FONT}`;
-  ctx.fillText(`觀測點（${state.coordOrder === 'lonlat' ? '經,緯' : '緯,經'}）`, pad, y);
-  y += 20;
-
-  stations.forEach(s => {
-    const cy = y + rowH / 2;
-    ctx.beginPath();
-    ctx.arc(pad + 9, cy, 9, 0, Math.PI * 2);
-    ctx.fillStyle = stationColorFor(s);
-    ctx.fill();
-    ctx.textAlign = 'center';
-    ctx.textBaseline = 'middle';
-    ctx.fillStyle = '#fff';
-    ctx.font = `bold 10px ${SNAP_FONT}`;
-    ctx.fillText(String(s.id), pad + 9, cy);
-    ctx.textAlign = 'left';
-    let x = pad + 26;
-    if (s.name) {
-      ctx.fillStyle = '#202124';
-      ctx.font = `bold 13px ${SNAP_FONT}`;
-      ctx.fillText(s.name, x, cy);
-      x += ctx.measureText(s.name).width + 10;
+    if (i > 0) {
+      ctx.strokeStyle = '#eee';
+      ctx.lineWidth = 1;
+      ctx.beginPath();
+      ctx.moveTo(pad, y + 0.5);
+      ctx.lineTo(W - pad, y + 0.5);
+      ctx.stroke();
+      y += 10;
     }
-    ctx.fillStyle = '#202124';
-    ctx.font = `13px ${SNAP_FONT}`;
-    ctx.fillText(`${formatLatLon(s.lat, s.lon)}　方位角 ${s.azimuth.toFixed(1)}°`, x, cy);
-    ctx.textBaseline = 'top';
-    y += rowH;
+
+    // A colour dot ties the group back to the map; the name itself stays dark
+    // so it does not read as one of the observation points. Single-group mode
+    // has no group to name.
+    if (state.multiGroup) {
+      ctx.beginPath();
+      ctx.arc(pad + 5, y + 8, 5, 0, Math.PI * 2);
+      ctx.fillStyle = color;
+      ctx.fill();
+      ctx.fillStyle = '#202124';
+      ctx.font = `bold 14px ${SNAP_FONT}`;
+      ctx.fillText(groupLabel(group), pad + 16, y);
+      y += 20;
+    }
+
+    ctx.fillStyle = '#5f6368';
+    ctx.font = `12px ${SNAP_FONT}`;
+    ctx.fillText('目標座標', pad, y + 5);
+    if (result && result.target) {
+      ctx.fillStyle = '#202124';
+      ctx.font = `bold 17px ${SNAP_FONT}`;
+      ctx.fillText(formatLatLon(result.target.lat, result.target.lon), pad + 72, y);
+      const minA = result.minAcuteAngle;
+      const warn = minA.value < 30;
+      ctx.fillStyle = warn ? '#c5221f' : '#5f6368';
+      ctx.font = `11px ${SNAP_FONT}`;
+      ctx.fillText(`最小銳角 ${minA.value.toFixed(1)}° (#${minA.stationPair[0]}–#${minA.stationPair[1]})` +
+        (warn ? ' ⚠ 夾角過小' : ''), pad + 72, y + 20);
+    } else {
+      ctx.fillStyle = '#c5221f';
+      ctx.font = `13px ${SNAP_FONT}`;
+      ctx.fillText(result && result.error ? result.error : '觀測點不足', pad + 72, y + 2);
+    }
+    y += headH;
+
+    ctx.fillStyle = '#5f6368';
+    ctx.font = `12px ${SNAP_FONT}`;
+    ctx.fillText(`觀測點（${state.coordOrder === 'lonlat' ? '經,緯' : '緯,經'}）`, pad, y);
+    y += 18;
+
+    stations.forEach(s => {
+      const cy = y + rowH / 2;
+      ctx.beginPath();
+      ctx.arc(pad + 9, cy, 9, 0, Math.PI * 2);
+      ctx.fillStyle = color;
+      ctx.fill();
+      ctx.textAlign = 'center';
+      ctx.textBaseline = 'middle';
+      ctx.fillStyle = '#fff';
+      ctx.font = `bold 10px ${SNAP_FONT}`;
+      ctx.fillText(String(s.id), pad + 9, cy);
+      ctx.textAlign = 'left';
+      let x = pad + 26;
+      if (s.name) {
+        ctx.fillStyle = '#202124';
+        ctx.font = `bold 13px ${SNAP_FONT}`;
+        ctx.fillText(s.name, x, cy);
+        x += ctx.measureText(s.name).width + 10;
+      }
+      ctx.fillStyle = '#202124';
+      ctx.font = `13px ${SNAP_FONT}`;
+      ctx.fillText(`${formatLatLon(s.lat, s.lon)}　方位角 ${s.azimuth.toFixed(1)}°`, x, cy);
+      ctx.textBaseline = 'top';
+      y += rowH;
+    });
+    y += 10;
   });
 
-  y += 6;
   ctx.strokeStyle = '#e0e0e0';
   ctx.lineWidth = 1;
   ctx.beginPath();
@@ -338,14 +431,14 @@ function downloadBlob(blob, filename) {
   setTimeout(() => URL.revokeObjectURL(url), 1000);
 }
 
-document.getElementById('btn-copy-shot').addEventListener('click', async () => {
-  const btn = document.getElementById('btn-copy-shot');
+// Shared by the all-groups button and every per-group button.
+async function captureSnapshot(btn, build, filename) {
+  const label = btn.textContent;
   btn.disabled = true;
   btn.textContent = '產生中…';
   // Handing ClipboardItem a promise keeps the write inside the user gesture,
   // which Safari requires; the same promise feeds the download fallback.
-  const shot = buildSnapshotCanvas()
-    .then(c => new Promise(res => c.toBlob(res, 'image/png')));
+  const shot = build().then(c => new Promise(res => c.toBlob(res, 'image/png')));
   let copied = false;
   try {
     if (navigator.clipboard && navigator.clipboard.write && window.ClipboardItem) {
@@ -360,24 +453,20 @@ document.getElementById('btn-copy-shot').addEventListener('click', async () => {
     if (!blob) throw new Error('無法產生圖片');
     btn.disabled = false;
     if (copied) {
-      flashButton(btn, '✓ 已複製截圖', '📸 複製截圖');
+      flashButton(btn, '✓ 已複製截圖', label);
     } else {
-      downloadBlob(blob, `triangulation-${state.date}.png`);
-      flashButton(btn, '✓ 已下載圖片', '📸 複製截圖');
+      downloadBlob(blob, filename);
+      flashButton(btn, '✓ 已下載圖片', label);
     }
   } catch (e) {
     btn.disabled = false;
-    btn.textContent = '📸 複製截圖';
+    btn.textContent = label;
     showError('截圖失敗：' + e.message);
   }
-});
+}
 
-// ── Angles toggle ──────────────────────────────────────────────────────────
-document.getElementById('toggle-angles').addEventListener('click', () => {
-  state.showAllAngles = !state.showAllAngles;
-  allAnglesEl.hidden = !state.showAllAngles;
-  document.getElementById('toggle-angles').textContent =
-    state.showAllAngles ? '▲ 收合全部夾角' : '▼ 展開全部夾角';
+document.getElementById('btn-copy-shot').addEventListener('click', e => {
+  captureSnapshot(e.currentTarget, () => buildSnapshotCanvas(), `triangulation-${state.date}.png`);
 });
 
 // ── Help toggle ────────────────────────────────────────────────────────────
@@ -408,42 +497,121 @@ function formatLatLon(lat, lon) {
   return `${a.toFixed(6)}, ${b.toFixed(6)}`;
 }
 
-// ── Station management ─────────────────────────────────────────────────────
-function addStation(lat, lon, azimuth) {
-  const id = state.nextId++;
-  state.stations.push({ id, lat, lon, azimuth, name: '', enabled: true });
-  renderStationList();
-  updateDeclinationDisplay();
-  recalculate();
+// ── Group & station lookup ─────────────────────────────────────────────────
+// Unchecked groups and stations stay in the list but drop out of the map, the
+// calculation, the copy buttons and the snapshot.
+// With 多組別模式 off the app behaves as it did before groups existed: only
+// the first group is shown, drawn and calculated. Any further groups keep
+// their data and come back the moment the mode is switched on again.
+function visibleGroups() {
+  return state.multiGroup ? state.groups : state.groups.slice(0, 1);
 }
 
-// Unchecked stations are kept in the list but excluded from the map, the
-// calculation and the snapshot.
-function activeStations() {
-  return state.stations.filter(s => s.enabled);
+function activeGroups() {
+  return state.multiGroup ? state.groups.filter(g => g.enabled) : visibleGroups();
 }
 
-// Colors follow a station's position in the full list, so unchecking one
-// doesn't recolour the rest.
-function stationColorFor(s) {
-  return stationColor(state.stations.indexOf(s));
+function activeStationsIn(group) {
+  return group.stations.filter(s => s.enabled);
+}
+
+// Every station in a group shares the group's colour — that is what makes it
+// possible to see which bearing lines belong to which target. Within a group
+// they are told apart by the #n badge and the name label.
+function groupColor(group) {
+  return stationColor(state.groups.indexOf(group));
+}
+
+function groupLabel(group) {
+  return group.name || `組${state.groups.indexOf(group) + 1}`;
+}
+
+function findGroup(id) {
+  return state.groups.find(g => g.id === id);
+}
+
+function findStation(groupId, stationId) {
+  const g = findGroup(groupId);
+  return g ? g.stations.find(s => s.id === stationId) : null;
 }
 
 function escapeHtml(str) {
   return str.replace(/[&<>"]/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[c]));
 }
 
-function deleteStation(id) {
-  state.stations = state.stations.filter(s => s.id !== id);
-  renderStationList();
+// ── Group management ───────────────────────────────────────────────────────
+function addGroup() {
+  const group = {
+    id: state.nextGroupId++,
+    name: '',
+    enabled: true,
+    collapsed: false,
+    showAngles: false,
+    nextStationId: 1,
+    stations: [],
+  };
+  state.groups.push(group);
+  renderGroupList();
+  recalculate();
+  return group;
+}
+
+function deleteGroup(id) {
+  state.groups = state.groups.filter(g => g.id !== id);
+  renderGroupList();
   updateDeclinationDisplay();
   recalculate();
 }
 
-function updateStationLatLon(id, str) {
+function updateGroupName(id, value) {
+  const g = findGroup(id);
+  if (!g) return;
+  g.name = value.trim();
+  recalculate();  // the map's target label and the snapshot follow the name
+}
+
+function setGroupEnabled(id, enabled) {
+  const g = findGroup(id);
+  if (!g) return;
+  g.enabled = enabled;
+  const card = groupListEl.querySelector(`[data-group-id="${id}"]`);
+  if (card) card.classList.toggle('off', !enabled);
+  updateDeclinationDisplay();
+  recalculate();
+}
+
+function toggleGroupCollapsed(id) {
+  const g = findGroup(id);
+  if (!g) return;
+  g.collapsed = !g.collapsed;
+  renderGroupList();
+}
+
+// ── Station management ─────────────────────────────────────────────────────
+// Station numbers restart at #1 in each group, so a group reads as its own
+// small survey rather than a slice of one long list.
+function addStation(groupId, lat, lon, azimuth) {
+  const g = findGroup(groupId);
+  if (!g) return;
+  g.stations.push({ id: g.nextStationId++, lat, lon, azimuth, name: '', enabled: true });
+  renderGroupList();
+  updateDeclinationDisplay();
+  recalculate();
+}
+
+function deleteStation(groupId, stationId) {
+  const g = findGroup(groupId);
+  if (!g) return;
+  g.stations = g.stations.filter(s => s.id !== stationId);
+  renderGroupList();
+  updateDeclinationDisplay();
+  recalculate();
+}
+
+function updateStationLatLon(groupId, stationId, str) {
   const parsed = parseLatLon(str);
   if (!parsed) return;
-  const s = state.stations.find(s => s.id === id);
+  const s = findStation(groupId, stationId);
   if (!s) return;
   s.lat = parsed.lat;
   s.lon = parsed.lon;
@@ -451,117 +619,202 @@ function updateStationLatLon(id, str) {
   recalculate();
 }
 
-function updateStationAzimuth(id, value) {
-  const s = state.stations.find(s => s.id === id);
+function updateStationAzimuth(groupId, stationId, value) {
+  const s = findStation(groupId, stationId);
   if (!s) return;
   s.azimuth = parseFloat(value);
   recalculate();
 }
 
-function updateStationName(id, value) {
-  const s = state.stations.find(s => s.id === id);
+function updateStationName(groupId, stationId, value) {
+  const s = findStation(groupId, stationId);
   if (!s) return;
   s.name = value.trim();
   recalculate();  // the map label and snapshot follow the name
 }
 
-function setStationEnabled(id, enabled) {
-  const s = state.stations.find(s => s.id === id);
+function setStationEnabled(groupId, stationId, enabled) {
+  const s = findStation(groupId, stationId);
   if (!s) return;
   s.enabled = enabled;
-  const row = stationListEl.querySelector(`[data-station-id="${id}"]`);
+  const row = groupListEl.querySelector(
+    `[data-group-id="${groupId}"] [data-station-id="${stationId}"]`);
   if (row) row.classList.toggle('off', !enabled);
   updateDeclinationDisplay();
   recalculate();
 }
 
-function renderStationList() {
-  const coordHint = state.coordOrder === 'lonlat' ? '經,緯' : '緯,經';
-  stationListEl.innerHTML = '';
-  state.stations.forEach((s, idx) => {
-    const color = stationColor(idx);
-    const row = document.createElement('div');
-    row.className = 'station-row' + (s.enabled ? '' : ' off');
-    row.dataset.stationId = s.id;
-    row.innerHTML = `
+function stationRowHtml(group, s, coordHint) {
+  return `
+    <div class="station-row${s.enabled ? '' : ' off'}" data-station-id="${s.id}">
       <input type="checkbox" class="station-toggle" title="取消勾選即從地圖與計算中排除"
-             ${s.enabled ? 'checked' : ''} data-id="${s.id}">
-      <span class="station-badge" style="background:${color}" title="在地圖上定位這一站">#${s.id}</span>
+             ${s.enabled ? 'checked' : ''}>
+      <span class="station-badge" style="background:${groupColor(group)}"
+            title="在地圖上定位這一站">#${s.id}</span>
       <input type="text" class="name-input" placeholder="名稱" title="名稱（選填）"
-             value="${escapeHtml(s.name)}"
-             data-id="${s.id}" data-role="name">
-      <input type="text" class="latlon-input"
-             value="${formatLatLon(s.lat, s.lon)}"
-             placeholder="${coordHint}"
-             data-id="${s.id}" data-role="latlon">
+             value="${escapeHtml(s.name)}" data-role="name">
+      <input type="text" class="latlon-input" value="${formatLatLon(s.lat, s.lon)}"
+             placeholder="${coordHint}" data-role="latlon">
       <span class="az-label">°</span>
       <input type="number" class="az-input" step="0.1" min="0" max="360"
-             value="${s.azimuth}"
-             data-id="${s.id}" data-role="azimuth">
-      <button class="btn-delete" data-id="${s.id}">✕</button>
-    `;
-    stationListEl.appendChild(row);
-  });
+             value="${s.azimuth}" data-role="azimuth">
+      <button class="btn-delete" data-act="del-station">✕</button>
+    </div>`;
+}
 
-  stationListEl.querySelectorAll('input[data-role]').forEach(input => {
-    input.addEventListener('change', e => {
-      const id = parseInt(e.target.dataset.id);
-      const role = e.target.dataset.role;
-      if (role === 'latlon') {
-        updateStationLatLon(id, e.target.value);
-      } else if (role === 'name') {
-        updateStationName(id, e.target.value);
-      } else {
-        updateStationAzimuth(id, e.target.value);
-      }
-    });
-  });
+// Collapsed groups shrink to their header line so a screen full of groups
+// still fits the panel; the header keeps the count and target visible.
+function groupSummary(group) {
+  const r = results.get(group.id);
+  const n = activeStationsIn(group).length;
+  if (r && r.target) return `${n} 點 · ${formatLatLon(r.target.lat, r.target.lon)}`;
+  return `${n} 點`;
+}
 
-  stationListEl.querySelectorAll('.station-toggle').forEach(box => {
-    box.addEventListener('change', e => {
-      setStationEnabled(parseInt(e.target.dataset.id), e.target.checked);
-    });
-  });
+function renderGroupList() {
+  const coordHint = state.coordOrder === 'lonlat' ? '經,緯' : '緯,經';
+  groupListEl.innerHTML = '';
+  document.getElementById('btn-add-group').hidden = !state.multiGroup;
+  document.getElementById('btn-copy-shot').hidden = !state.multiGroup;
 
-  stationListEl.querySelectorAll('.btn-delete').forEach(btn => {
-    btn.addEventListener('click', e => {
-      deleteStation(parseInt(e.target.dataset.id));
-    });
-  });
-
-  stationListEl.querySelectorAll('.station-badge').forEach(badge => {
-    badge.addEventListener('click', e => {
-      const id = parseInt(e.target.closest('.station-row').dataset.stationId);
-      selectStation(id);
-      focusStation(id);
-    });
+  visibleGroups().forEach(group => {
+    const card = document.createElement('div');
+    card.className = 'group-card' + (state.multiGroup ? '' : ' single') +
+      (group.enabled ? '' : ' off') + (group.collapsed ? ' collapsed' : '');
+    card.dataset.groupId = group.id;
+    card.innerHTML = `
+      <div class="group-head">
+        <input type="checkbox" class="group-toggle" title="取消勾選即從地圖與計算中排除整組"
+               ${group.enabled ? 'checked' : ''}>
+        <span class="group-swatch" style="background:${groupColor(group)}"></span>
+        <input type="text" class="group-name" placeholder="組別名稱"
+               value="${escapeHtml(group.name)}">
+        <span class="group-summary">${escapeHtml(groupSummary(group))}</span>
+        <button class="group-collapse" data-act="collapse"
+                title="${group.collapsed ? '展開' : '收合'}">${group.collapsed ? '▶' : '▼'}</button>
+        <button class="btn-delete" data-act="del-group" title="刪除整組">✕</button>
+      </div>
+      <div class="group-body">
+        ${group.stations.map(s => stationRowHtml(group, s, coordHint)).join('')}
+        <div class="group-actions">
+          <button class="btn-action" data-act="locate">📍 定位</button>
+          <button class="btn-action" data-act="pick">＋ 地圖點選</button>
+          <button class="btn-action" data-act="manual">＋ 手動新增</button>
+          <button class="btn-action danger" data-act="clear">清空</button>
+        </div>
+      </div>`;
+    groupListEl.appendChild(card);
   });
 }
+
+// One delegated listener for the whole group list — the cards are rebuilt on
+// every render, so per-element listeners would have to be rewired each time.
+groupListEl.addEventListener('change', e => {
+  const card = e.target.closest('.group-card');
+  if (!card) return;
+  const groupId = parseInt(card.dataset.groupId);
+  const row = e.target.closest('.station-row');
+
+  if (e.target.classList.contains('group-toggle')) {
+    setGroupEnabled(groupId, e.target.checked);
+  } else if (e.target.classList.contains('group-name')) {
+    updateGroupName(groupId, e.target.value);
+  } else if (e.target.classList.contains('station-toggle')) {
+    setStationEnabled(groupId, parseInt(row.dataset.stationId), e.target.checked);
+  } else if (row && e.target.dataset.role) {
+    const stationId = parseInt(row.dataset.stationId);
+    const value = e.target.value;
+    if (e.target.dataset.role === 'latlon') updateStationLatLon(groupId, stationId, value);
+    else if (e.target.dataset.role === 'name') updateStationName(groupId, stationId, value);
+    else updateStationAzimuth(groupId, stationId, value);
+  }
+});
+
+groupListEl.addEventListener('click', e => {
+  const card = e.target.closest('.group-card');
+  if (!card) return;
+  const groupId = parseInt(card.dataset.groupId);
+  const row = e.target.closest('.station-row');
+  const act = e.target.closest('[data-act]');
+
+  if (e.target.classList.contains('station-badge')) {
+    const stationId = parseInt(row.dataset.stationId);
+    selectStation(groupId, stationId);
+    focusStation(stationKey(groupId, stationId));
+    return;
+  }
+  if (!act) return;
+  switch (act.dataset.act) {
+    case 'collapse':    toggleGroupCollapsed(groupId); break;
+    case 'del-group':   confirmDeleteGroup(groupId); break;
+    case 'del-station': deleteStation(groupId, parseInt(row.dataset.stationId)); break;
+    case 'locate':      locateInto(groupId); break;
+    case 'pick':        enablePickMode(({ lat, lon }) => openAzPopup(groupId, lat, lon)); break;
+    case 'manual':      openManualForm(groupId); break;
+    case 'clear':       confirmClearGroup(groupId); break;
+  }
+});
+
+document.getElementById('btn-add-group').addEventListener('click', () => addGroup());
+
+// ── 多組別模式 toggle ──────────────────────────────────────────────────────
+
+function updateMultiGroupUI() {
+  swMultiGroup.classList.toggle('on', state.multiGroup);
+  swMultiGroup.setAttribute('aria-checked', String(state.multiGroup));
+}
+
+swMultiGroup.addEventListener('click', () => {
+  state.multiGroup = !state.multiGroup;
+  updateMultiGroupUI();
+  renderGroupList();
+  updateDeclinationDisplay();
+  recalculate();
+});
 
 // ── Map ↔ list selection ────────────────────────────────────────────────────
 // Clicking a station marker/line on the map highlights the matching row in
 // the list; clicking a row's badge pans the map to that station and opens
-// its popup. Keeps the two views in sync.
-function selectStation(id) {
-  stationListEl.querySelectorAll('.station-row').forEach(row => {
-    row.classList.toggle('active', parseInt(row.dataset.stationId) === id);
-  });
-  const row = stationListEl.querySelector(`[data-station-id="${id}"]`);
-  if (row) row.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
+// its popup. Station numbers repeat across groups, so markers are keyed by
+// both ids.
+function stationKey(groupId, stationId) {
+  return `${groupId}:${stationId}`;
 }
 
-// ── Manual input form ──────────────────────────────────────────────────────
-document.getElementById('btn-add-manual').addEventListener('click', () => {
-  const form = document.getElementById('manual-form');
-  form.hidden = !form.hidden;
-  if (!form.hidden) {
-    updateCoordUI(); // refresh placeholder
+function selectStation(groupId, stationId) {
+  groupListEl.querySelectorAll('.station-row').forEach(row => row.classList.remove('active'));
+  const row = groupListEl.querySelector(
+    `[data-group-id="${groupId}"] [data-station-id="${stationId}"]`);
+  if (row) {
+    row.classList.add('active');
+    row.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
+  }
+}
+
+// ── Adding stations: manual form, map pick, locate ────────────────────────
+// All three flows are shared by every group, so they remember which group
+// asked. The manual form is a single element moved under the asking group.
+let _formGroupId = null;
+let _pendingPick = null;
+
+const manualFormEl = document.getElementById('manual-form');
+
+function openManualForm(groupId) {
+  const card = groupListEl.querySelector(`[data-group-id="${groupId}"] .group-body`);
+  if (!card) return;
+  const reopening = manualFormEl.hidden || _formGroupId !== groupId;
+  card.appendChild(manualFormEl);
+  manualFormEl.hidden = !reopening;
+  _formGroupId = reopening ? groupId : null;
+  if (reopening) {
+    updateCoordUI();  // refresh placeholder
     document.getElementById('input-latlon').focus();
   }
-});
+}
 
 document.getElementById('btn-manual-cancel').addEventListener('click', () => {
-  document.getElementById('manual-form').hidden = true;
+  manualFormEl.hidden = true;
+  _formGroupId = null;
 });
 
 document.getElementById('btn-manual-confirm').addEventListener('click', confirmManual);
@@ -571,6 +824,7 @@ document.getElementById('input-az').addEventListener('keydown', e => {
 });
 
 function confirmManual() {
+  if (_formGroupId == null) return;
   const latlonStr = document.getElementById('input-latlon').value;
   const az = parseFloat(document.getElementById('input-az').value);
   const parsed = parseLatLon(latlonStr);
@@ -586,17 +840,16 @@ function confirmManual() {
   }
 
   hideError();
-  addStation(parsed.lat, parsed.lon, az);
-  document.getElementById('manual-form').hidden = true;
+  manualFormEl.hidden = true;
   document.getElementById('input-latlon').value = '';
   document.getElementById('input-az').value = '';
+  const groupId = _formGroupId;
+  _formGroupId = null;
+  addStation(groupId, parsed.lat, parsed.lon, az);
 }
 
-// ── Map-click flow with inline popup ──────────────────────────────────────
-let _pendingPick = null;
-
-function openAzPopup(lat, lon) {
-  _pendingPick = { lat, lon };
+function openAzPopup(groupId, lat, lon) {
+  _pendingPick = { groupId, lat, lon };
   azPopupCoordsEl.textContent = formatLatLon(lat, lon);
   azPopupInputEl.value = '';
   azPopupInputEl.style.borderColor = '';
@@ -604,13 +857,9 @@ function openAzPopup(lat, lon) {
   azPopupInputEl.focus();
 }
 
-document.getElementById('btn-add-map').addEventListener('click', () => {
-  enablePickMode(({ lat, lon }) => openAzPopup(lat, lon));
-});
-
-// ── Locate me: add an observation point at the device's GPS position ───────
-document.getElementById('btn-locate').addEventListener('click', () => {
-  const btn = document.getElementById('btn-locate');
+// Locate me: add an observation point at the device's GPS position.
+function locateInto(groupId) {
+  const btn = groupListEl.querySelector(`[data-group-id="${groupId}"] [data-act="locate"]`);
   if (!navigator.geolocation) {
     showError('此瀏覽器不支援定位功能');
     return;
@@ -618,17 +867,16 @@ document.getElementById('btn-locate').addEventListener('click', () => {
   hideError();
   btn.disabled = true;
   btn.textContent = '定位中…';
+  const restore = () => { btn.disabled = false; btn.textContent = '📍 定位'; };
   navigator.geolocation.getCurrentPosition(
     pos => {
-      btn.disabled = false;
-      btn.textContent = '📍 定位';
+      restore();
       const { latitude, longitude } = pos.coords;
       centerMap(latitude, longitude, 15);
-      openAzPopup(latitude, longitude);
+      openAzPopup(groupId, latitude, longitude);
     },
     err => {
-      btn.disabled = false;
-      btn.textContent = '📍 定位';
+      restore();
       const msgs = {
         1: '定位權限被拒絕，請在瀏覽器設定中允許存取位置',
         2: '無法取得位置訊號，請確認 GPS 已開啟',
@@ -638,7 +886,7 @@ document.getElementById('btn-locate').addEventListener('click', () => {
     },
     { enableHighAccuracy: true, timeout: 15000, maximumAge: 0 }
   );
-});
+}
 
 azPopupConfirm.addEventListener('click', confirmAzPopup);
 
@@ -662,32 +910,55 @@ function confirmAzPopup() {
   }
   azPopupInputEl.style.borderColor = '';
   azPopupEl.hidden = true;
-  addStation(_pendingPick.lat, _pendingPick.lon, az);
+  const { groupId, lat, lon } = _pendingPick;
   _pendingPick = null;
+  addStation(groupId, lat, lon, az);
 }
 
-// ── Clear all ──────────────────────────────────────────────────────────────
-const confirmPopupEl  = document.getElementById('confirm-popup');
-const confirmMsgEl    = document.getElementById('confirm-popup-msg');
-const confirmOkBtn    = document.getElementById('confirm-popup-ok');
+// ── Destructive actions: clear a group, delete a group ────────────────────
+const confirmPopupEl   = document.getElementById('confirm-popup');
+const confirmMsgEl     = document.getElementById('confirm-popup-msg');
+const confirmOkBtn     = document.getElementById('confirm-popup-ok');
 const confirmCancelBtn = document.getElementById('confirm-popup-cancel');
+let _confirmAction = null;
 
-document.getElementById('btn-clear').addEventListener('click', () => {
-  if (!state.stations.length) return;
-  confirmMsgEl.textContent = `確定要清空全部 ${state.stations.length} 個觀測點嗎？`;
+function askConfirm(msg, okLabel, action) {
+  confirmMsgEl.textContent = msg;
+  confirmOkBtn.textContent = okLabel;
+  _confirmAction = action;
   confirmPopupEl.hidden = false;
   confirmCancelBtn.focus();  // destructive action must not be one stray Enter away
-});
+}
 
-function closeConfirm() { confirmPopupEl.hidden = true; }
+function confirmClearGroup(groupId) {
+  const g = findGroup(groupId);
+  if (!g || !g.stations.length) return;
+  askConfirm(`確定要清空「${groupLabel(g)}」的 ${g.stations.length} 個觀測點嗎？`, '確定清空', () => {
+    g.stations = [];
+    g.nextStationId = 1;
+    renderGroupList();
+    updateDeclinationDisplay();
+    recalculate();
+  });
+}
+
+function confirmDeleteGroup(groupId) {
+  const g = findGroup(groupId);
+  if (!g) return;
+  if (!g.stations.length) { deleteGroup(groupId); return; }
+  askConfirm(`確定要刪除「${groupLabel(g)}」整組（含 ${g.stations.length} 個觀測點）嗎？`,
+    '確定刪除', () => deleteGroup(groupId));
+}
+
+function closeConfirm() {
+  confirmPopupEl.hidden = true;
+  _confirmAction = null;
+}
 
 confirmOkBtn.addEventListener('click', () => {
+  const action = _confirmAction;
   closeConfirm();
-  state.stations = [];
-  state.nextId = 1;
-  renderStationList();
-  updateDeclinationDisplay();
-  recalculate();
+  if (action) action();
 });
 
 confirmCancelBtn.addEventListener('click', closeConfirm);
@@ -702,73 +973,152 @@ document.addEventListener('keydown', e => {
 });
 
 // ── Recalculate & render ───────────────────────────────────────────────────
-function recalculate() {
-  clearOverlays();
-  hideError();
-  clearResults();
-
-  const active = activeStations();
-  if (active.length === 0) return;
+// Every checked group is solved on its own: its own bearing lines, its own
+// target, its own minimum angle. Nothing crosses between groups.
+//
+// Solving and drawing are separate so the per-group snapshot can redraw the
+// map with one group's overlays only, without recomputing anything.
+function solveGroup(group) {
+  const active = activeStationsIn(group);
+  if (active.length === 0) return null;
 
   let stations = active;
   if (state.northMode === 'magnetic') {
     try {
       stations = applyMagneticCorrection(active, state.date);
     } catch (e) {
-      showError('磁偏角計算失敗：' + e.message);
-      return;
+      return { error: '磁偏角計算失敗：' + e.message, stations, lineLength: 0 };
     }
   }
 
   const lineLength = computeLineLength(stations);
-  active.forEach((s, idx) => {
-    const color = stationColorFor(s);
-    const nameHtml = s.name ? escapeHtml(s.name) : '';
-    const info = `<b>觀測點 #${s.id}${nameHtml ? ' ' + nameHtml : ''}</b>` +
-      `<br>座標：${formatLatLon(s.lat, s.lon)}` +
-      `<br>方位角：${stations[idx].azimuth.toFixed(1)}°`;
-    drawStation(s.lat, s.lon, `#${s.id}`, color, s.id, info, selectStation, nameHtml);
-    drawBearingLine(s.lat, s.lon, stations[idx].azimuth, lineLength, color, s.id, info, selectStation);
-  });
+  if (active.length < 2) {
+    return { error: '至少需要 2 個觀測點', stations, lineLength };
+  }
 
-  if (active.length < 2) return;
-
-  let result;
   try {
-    result = calculateTarget(stations, {
+    const result = calculateTarget(stations, {
       lineAlgorithm: state.lineAlgorithm,
       estimator: state.estimator,
     });
+    return Object.assign(result, { stations, lineLength });
   } catch (e) {
-    showError(e.message);
-    return;
+    return { error: e.message, stations, lineLength };
   }
+}
 
-  drawTarget(result.target.lat, result.target.lon);
-  result.pairIntersections.forEach(p => drawIntersection(p.lat, p.lon));
+// Draws the given groups' overlays, replacing whatever was on the map.
+function drawGroups(groups) {
+  clearOverlays();
+  groups.forEach(group => {
+    const r = results.get(group.id);
+    if (!r) return;
+    const color = groupColor(group);
+    activeStationsIn(group).forEach((s, idx) => {
+      const nameHtml = s.name ? escapeHtml(s.name) : '';
+      const info = `<b>${escapeHtml(groupLabel(group))} #${s.id}` +
+        `${nameHtml ? ' ' + nameHtml : ''}</b>` +
+        `<br>座標：${formatLatLon(s.lat, s.lon)}` +
+        `<br>方位角：${r.stations[idx].azimuth.toFixed(1)}°`;
+      const key = stationKey(group.id, s.id);
+      drawStation(s.lat, s.lon, `#${s.id}`, color, key, info, onMarkerSelect, nameHtml);
+      drawBearingLine(s.lat, s.lon, r.stations[idx].azimuth, r.lineLength, color, key, info, onMarkerSelect);
+    });
+    if (!r.target) return;
+    // In single-group mode there is nothing to tell apart, so the cross needs
+    // no caption.
+    drawTarget(r.target.lat, r.target.lon,
+      state.multiGroup ? escapeHtml(groupLabel(group)) : '');
+    r.pairIntersections.forEach(p => drawIntersection(p.lat, p.lon));
+  });
+}
 
-  fitToPoints([
-    ...active.map(s => ({ lat: s.lat, lon: s.lon })),
-    result.target,
-  ]);
+function recalculate() {
+  hideError();
+  results.clear();
+  activeGroups().forEach(group => {
+    const r = solveGroup(group);
+    if (r) results.set(group.id, r);
+  });
+  drawGroups(activeGroups());
+  fitToPoints(fitPoints());
+  renderResults();
+  renderGroupSummaries();
+}
 
-  resultTargetEl.textContent = formatLatLon(result.target.lat, result.target.lon);
-  _lastTarget = result.target;
+// The map keys markers by "groupId:stationId"; unpack it to sync the list.
+function onMarkerSelect(key) {
+  const [groupId, stationId] = String(key).split(':').map(Number);
+  selectStation(groupId, stationId);
+}
 
-  // Copy / share / snapshot buttons
-  _shareUrl = `https://www.google.com/maps?q=${result.target.lat.toFixed(6)},${result.target.lon.toFixed(6)}`;
-  document.getElementById('result-actions').hidden = false;
+// Keep the collapsed-group headers showing the current point count and target
+// without rebuilding the whole list (which would drop input focus).
+function renderGroupSummaries() {
+  state.groups.forEach(group => {
+    const el = groupListEl.querySelector(`[data-group-id="${group.id}"] .group-summary`);
+    if (el) el.textContent = groupSummary(group);
+  });
+}
 
-  const minA = result.minAcuteAngle;
-  const warn = minA.value < 30;
-  resultAngleEl.textContent =
-    `${minA.value.toFixed(1)}° (#${minA.stationPair[0]}–#${minA.stationPair[1]})` +
-    (warn ? ' ⚠ 夾角過小' : '');
-  resultAngleEl.className = 'result-value' + (warn ? ' warn' : '');
+function renderResults() {
+  resultListEl.innerHTML = '';
+  const groups = activeGroups().filter(g => activeStationsIn(g).length > 0);
+  // Single-group mode has no group to name, so the row reads like it did
+  // before groups existed.
+  const head = (g) => state.multiGroup
+    ? `<span class="group-swatch" style="background:${groupColor(g)}"></span>
+       <span class="result-label">${escapeHtml(groupLabel(g))}</span>`
+    : '<span class="result-label">目標座標</span>';
 
-  allAnglesBodyEl.innerHTML = result.allPairAngles
-    .map(p => `<tr><td>#${p.stations[0]}–#${p.stations[1]}</td><td>${p.angle.toFixed(1)}°</td></tr>`)
-    .join('');
+  groups.forEach(group => {
+    const r = results.get(group.id);
+    const block = document.createElement('div');
+    block.className = 'result-group';
+    block.dataset.groupId = group.id;
+
+    if (!r || !r.target) {
+      block.innerHTML = `
+        <div class="result-row">
+          ${head(group)}
+          <span class="result-value muted">${escapeHtml(r && r.error ? r.error : '—')}</span>
+        </div>`;
+      resultListEl.appendChild(block);
+      return;
+    }
+
+    const minA = r.minAcuteAngle;
+    const warn = minA.value < 30;
+    block.innerHTML = `
+      <div class="result-row">
+        ${head(group)}
+        <span class="result-value">${formatLatLon(r.target.lat, r.target.lon)}</span>
+      </div>
+      <div class="result-sub">
+        <span class="result-label">最小銳角</span>
+        <span class="result-value${warn ? ' warn' : ''}">
+          ${minA.value.toFixed(1)}° (#${minA.stationPair[0]}–#${minA.stationPair[1]})${warn ? ' ⚠ 夾角過小' : ''}
+        </span>
+        <button class="link-btn" data-act="angles">${group.showAngles ? '▲ 收合夾角' : '▼ 全部夾角'}</button>
+      </div>
+      <div class="all-angles"${group.showAngles ? '' : ' hidden'}>
+        <table><tbody>${r.allPairAngles
+          .map(p => `<tr><td>#${p.stations[0]}–#${p.stations[1]}</td><td>${p.angle.toFixed(1)}°</td></tr>`)
+          .join('')}</tbody></table>
+      </div>
+      <div class="result-actions-row">
+        <button class="btn-result-action" data-act="copy">📋 複製座標</button>
+        <button class="btn-result-action" data-act="share">🔗 位置分享</button>
+        <button class="btn-result-action" data-act="shot">📸 複製截圖</button>
+      </div>`;
+    resultListEl.appendChild(block);
+  });
+
+  if (!groups.length) {
+    resultListEl.innerHTML = '<div class="result-row"><span class="result-value muted">—</span></div>';
+  }
+  // 截圖所有組別 covers every checked group, so one solved group is enough.
+  document.getElementById('btn-copy-shot').disabled = !groups.length;
 }
 
 // ── Helpers ────────────────────────────────────────────────────────────────
@@ -779,17 +1129,4 @@ function showError(msg) {
 
 function hideError() {
   errorBannerEl.hidden = true;
-}
-
-function clearResults() {
-  resultTargetEl.textContent = '—';
-  resultAngleEl.textContent = '—';
-  resultAngleEl.className = 'result-value';
-  allAnglesBodyEl.innerHTML = '';
-  _shareUrl = '';
-  _lastTarget = null;
-  document.getElementById('result-actions').hidden = true;
-  document.getElementById('btn-copy-coords').textContent = '📋 複製座標';
-  document.getElementById('btn-share').textContent = '🔗 位置分享';
-  document.getElementById('btn-copy-shot').textContent = '📸 複製截圖';
 }

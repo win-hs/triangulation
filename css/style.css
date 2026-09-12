@@ -212,9 +212,10 @@ body {
 
 /* ── Right panel ─────────────────────────────────────────────────── */
 #panel {
-  /* 400, not 360: a station row only fits on one line if the 6-decimal
-     coordinate field keeps ~150px after the checkbox, badge, name and azimuth. */
-  width: 400px;
+  /* Wide enough that a station row fits on one line: the 6-decimal coordinate
+     field needs ~150px after the checkbox, badge, name, azimuth, the group
+     card's padding and the panel scrollbar. */
+  width: 420px;
   flex-shrink: 0;
   background: var(--md-surface);
   border-left: 1px solid var(--md-outline);
@@ -272,8 +273,19 @@ body {
 .setting-col {
   display: flex;
   flex-direction: column;
-  gap: 6px;
+  gap: 4px;
 }
+
+/* The two settings blocks are glanced at, not read — keep them tight so the
+   observation list and results get the panel's height. */
+.section.settings {
+  gap: 6px;
+  padding: 7px 0;
+}
+.section.settings .section-title { font-size: 10px; }
+.section.settings .sub-label { font-size: 10px; margin-bottom: 2px; }
+.section.settings .algo-row { gap: 12px; align-items: flex-end; }
+#panel > .section.settings:first-of-type { padding-top: 10px; }
 
 /* ── Radio button group ──────────────────────────────────────────── */
 .radio-group {
@@ -281,12 +293,12 @@ body {
 }
 
 .radio-btn {
-  padding: 6px 14px;
+  padding: 3px 10px;
   border: 1px solid var(--md-outline);
   background: var(--md-surface);
   color: var(--md-on-surface-var);
   font-family: inherit;
-  font-size: 12px;
+  font-size: 11px;
   font-weight: 500;
   cursor: pointer;
   white-space: nowrap;
@@ -307,6 +319,35 @@ body {
 }
 
 .radio-btn:not(.active):hover { background: rgba(60,64,67,.06); }
+
+/* ── Toggle switch (多組別模式 only) ─────────────────────────────── */
+.switch {
+  position: relative;
+  flex-shrink: 0;
+  width: 38px;
+  height: 20px;
+  padding: 0;
+  border: none;
+  border-radius: 10px;
+  background: #bdc1c6;
+  cursor: pointer;
+  transition: background .18s ease;
+}
+.switch.on { background: var(--md-primary); }
+.switch:hover { filter: brightness(.95); }
+
+.switch-thumb {
+  position: absolute;
+  top: 2px;
+  left: 2px;
+  width: 16px;
+  height: 16px;
+  border-radius: 50%;
+  background: #fff;
+  box-shadow: 0 1px 3px rgba(60,64,67,.4);
+  transition: transform .18s ease;
+}
+.switch.on .switch-thumb { transform: translateX(18px); }
 
 /* ── Declination note ────────────────────────────────────────────── */
 .inline-note {
@@ -351,6 +392,98 @@ body {
   flex-direction: column;
   gap: 6px;
 }
+
+/* Section title with an action button pushed to the right. */
+.section-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+}
+
+/* ── Groups ──────────────────────────────────────────────────────────── */
+#group-list {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.group-card {
+  border: 1px solid var(--md-outline);
+  border-radius: var(--radius);
+  padding: 5px 4px;
+  background: var(--md-surface);
+}
+
+.group-head {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+}
+
+.group-swatch {
+  width: 10px;
+  height: 10px;
+  border-radius: 50%;
+  flex-shrink: 0;
+}
+
+.group-card input.group-name {
+  flex: 1;
+  min-width: 60px;
+  padding: 3px 5px;
+  border: 1px solid transparent;
+  border-radius: 4px;
+  background: transparent;
+  font-size: 13px;
+  font-weight: 500;
+  font-family: inherit;
+}
+.group-card input.group-name:hover  { border-color: #ddd; }
+.group-card input.group-name:focus  { border-color: #ccc; background: #fff; outline: none; }
+
+/* The summary only earns its space when the body is hidden. */
+.group-summary { display: none; }
+.group-card.collapsed .group-summary {
+  display: inline;
+  font-size: 11px;
+  color: #5f6368;
+  white-space: nowrap;
+}
+.group-card.collapsed .group-body { display: none; }
+
+.group-collapse {
+  border: none;
+  background: none;
+  color: #5f6368;
+  cursor: pointer;
+  font-size: 11px;
+  padding: 2px 3px;
+  flex-shrink: 0;
+}
+
+.group-body {
+  display: flex;
+  flex-direction: column;
+  gap: 3px;
+  margin-top: 4px;
+}
+
+.group-actions {
+  display: flex;
+  gap: 4px;
+  margin-top: 2px;
+}
+
+.group-card.off .group-swatch,
+.group-card.off .group-name,
+.group-card.off .group-body { opacity: .42; }
+
+/* 多組別模式 off: the single group needs no header, and the card border would
+   only box in a list that has nothing to be told apart from. */
+.group-card.single { border: none; padding: 0; }
+.group-card.single .group-head { display: none; }
+.group-card.single .group-body { margin-top: 0; }
 
 /* One station per row: checkbox, badge, name, coordinates, azimuth, delete.
    Wraps only when the viewport cannot hold it (mobile). */
@@ -449,7 +582,7 @@ body {
 
 /* ── Action buttons ──────────────────────────────────────────────── */
 /* All four actions stay on one row, so they share the width evenly. */
-#station-actions {
+#station-actions, .group-actions {
   display: flex;
   gap: 4px;
 }
@@ -533,14 +666,47 @@ body {
 
 .result-value.warn { color: var(--md-warn); }
 
-/* ── Result action buttons (copy / maps) ────────────────────────── */
-#result-actions {
+/* ── One result block per group ──────────────────────────────────── */
+#result-list {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+
+.result-group { display: flex; flex-direction: column; gap: 3px; }
+.result-group + .result-group { border-top: 1px solid #eee; padding-top: 8px; }
+
+.result-group .result-row { align-items: center; }
+.result-group .result-label { min-width: 0; color: var(--md-on-surface); font-weight: 500; }
+.result-group .result-row .result-value { margin-left: auto; font-weight: 700; }
+
+.result-sub {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  font-size: 12px;
+  padding-left: 18px;
+}
+.result-sub .result-label { min-width: 0; font-weight: 400; color: #777; }
+.result-sub .result-value { font-size: 12px; }
+.result-sub .link-btn { margin-left: auto; font-size: 11px; white-space: nowrap; }
+
+.result-value.muted { color: #999; font-weight: 400; }
+
+.result-actions-row {
   display: flex;
   flex-wrap: wrap;
   gap: 6px;
+  padding-left: 18px;
   margin-top: 2px;
 }
 
+.btn-result-action:disabled {
+  opacity: .45;
+  cursor: default;
+}
+
+/* ── Result action buttons (copy / maps / snapshot) ─────────────── */
 .btn-result-action {
   padding: 5px 14px;
   border: 1px solid var(--md-outline);
@@ -595,13 +761,13 @@ body {
 }
 
 /* ── Angles table ────────────────────────────────────────────────── */
-#all-angles table {
+.all-angles table {
   border-collapse: collapse;
   font-size: 13px;
   margin-top: 4px;
 }
 
-#all-angles td { padding: 2px 14px 2px 0; color: #444; }
+.all-angles td { padding: 2px 14px 2px 0; color: #444; }
 
 /* ── Panel bottom spacer ─────────────────────────────────────────── */
 .panel-spacer { height: 16px; flex-shrink: 0; }
@@ -679,6 +845,11 @@ body {
   pointer-events: none;
 }
 
+/* The group caption sits beside the target cross. It must not read as another
+   observation point, so it takes the target's red rather than the observers'
+   dark grey. */
+.station-label.target-label { color: #c5221f; }
+
 .target-marker {
   width: 24px;
   height: 24px;
@@ -713,6 +884,9 @@ body {
 
   /* Touch targets — 44px minimum */
   .radio-btn { padding: 11px 14px; font-size: 13px; }
+  .switch { width: 46px; height: 26px; border-radius: 13px; }
+  .switch-thumb { width: 22px; height: 22px; }
+  .switch.on .switch-thumb { transform: translateX(20px); }
   .btn-action { padding: 11px 4px; font-size: 13px; }
   .btn-primary, .btn-secondary { height: 44px; }
   .btn-result-action { padding: 10px 16px; font-size: 13px; }
@@ -738,7 +912,10 @@ body {
   .station-row input.az-input { width: 68px; }
   .btn-delete { padding: 9px 9px; }
   .station-toggle { width: 20px; height: 20px; }
-  /* 16px inputs can't share one line here, so the row wraps; keep the name
-     box from stealing the wrapped line's width. */
+  /* 16px inputs cannot share one line on a phone. Hold the coordinate field
+     to its full width so the row wraps instead of truncating the coordinate —
+     azimuth and delete drop to a second line. */
   .station-row input.name-input { width: 74px; }
+  .station-row input.latlon-input { min-width: 190px; }
+  .group-card { padding: 6px; }
 }

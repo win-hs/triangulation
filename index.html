@@ -74,7 +74,7 @@
   <div id="error-banner" hidden></div>
 
   <!-- ① 北向 ＋ 座標輸入順序 -->
-  <div class="section">
+  <div class="section settings">
     <div class="algo-row">
       <div class="setting-col">
         <div class="section-title">北向</div>
@@ -90,6 +90,13 @@
           <button id="btn-coord-lonlat" class="radio-btn">經,緯</button>
         </div>
       </div>
+      <div class="setting-col">
+        <div class="section-title">多組別模式</div>
+        <button id="sw-multi-group" class="switch" role="switch" aria-checked="false"
+                aria-label="多組別模式">
+          <span class="switch-thumb"></span>
+        </button>
+      </div>
     </div>
     <div id="date-label" class="date-row" hidden>
       <span>日期</span>
@@ -99,8 +106,7 @@
   </div>
 
   <!-- ② 計算方法 -->
-  <div class="section">
-    <div class="section-title">計算方法</div>
+  <div class="section settings">
     <div class="algo-row">
       <div>
         <div class="sub-label">交會算法</div>
@@ -121,14 +127,12 @@
 
   <!-- ③ 觀測點 -->
   <div class="section">
-    <div class="section-title">觀測點</div>
-    <div id="station-list"></div>
-    <div id="station-actions">
-      <button id="btn-locate"     class="btn-action">📍 定位</button>
-      <button id="btn-add-map"    class="btn-action">＋ 地圖點選</button>
-      <button id="btn-add-manual" class="btn-action">＋ 手動新增</button>
-      <button id="btn-clear"      class="btn-action danger">清空</button>
+    <div class="section-head">
+      <div class="section-title">觀測點</div>
+      <button id="btn-copy-shot" class="btn-result-action">📸 截圖所有組別</button>
     </div>
+    <div id="group-list"></div>
+    <button id="btn-add-group" class="btn-action">＋ 新增一組</button>
     <div id="manual-form" hidden>
       <label>座標
         <input type="text" id="input-latlon" placeholder="例：24.0, 120.5">
@@ -146,23 +150,7 @@
   <!-- ④ 結果 -->
   <div class="section" id="results">
     <div class="section-title">結果</div>
-    <div class="result-row">
-      <span class="result-label">目標座標</span>
-      <span class="result-value" id="result-target">—</span>
-    </div>
-    <div id="result-actions" hidden>
-      <button id="btn-copy-coords" class="btn-result-action">📋 複製座標</button>
-      <button id="btn-share"       class="btn-result-action">🔗 位置分享</button>
-      <button id="btn-copy-shot"   class="btn-result-action">📸 複製截圖</button>
-    </div>
-    <div class="result-row">
-      <span class="result-label">最小銳角</span>
-      <span class="result-value" id="result-min-angle">—</span>
-    </div>
-    <button id="toggle-angles" class="link-btn">▼ 展開全部夾角</button>
-    <div id="all-angles" hidden>
-      <table><tbody id="all-angles-body"></tbody></table>
-    </div>
+    <div id="result-list"></div>
   </div>
 
   <!-- ⑤ 使用說明 -->

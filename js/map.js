@@ -135,17 +135,20 @@ function focusStation(stationId) {
 }
 
 /**
- * Draw estimated target as a cross marker.
+ * Draw estimated target as a cross marker. labelHtml (pre-escaped, like
+ * infoHtml) names the group it belongs to — with several groups on the map
+ * the crosses are otherwise indistinguishable.
  */
-function drawTarget(lat, lon) {
+function drawTarget(lat, lon, labelHtml) {
   const icon = L.divIcon({
     className: '',
-    html: '<div class="target-marker">✕</div>',
+    html: '<div class="target-marker">✕</div>' +
+      (labelHtml ? `<span class="station-label target-label">${labelHtml}</span>` : ''),
     iconSize: [24, 24],
     iconAnchor: [12, 12],
   });
   L.marker([lat, lon], { icon })
-    .bindPopup(`目標: ${lat.toFixed(6)}, ${lon.toFixed(6)}`)
+    .bindPopup(`${labelHtml ? labelHtml + ' ' : ''}目標: ${lat.toFixed(6)}, ${lon.toFixed(6)}`)
     .addTo(overlayGroup);
 }
 
@@ -322,7 +325,9 @@ function captureMapCanvas() {
     ctx.lineWidth = 4;
     ctx.strokeStyle = '#fff';
     ctx.strokeText(el.textContent, x, y);
-    ctx.fillStyle = '#202124';
+    // Take the colour from the DOM so target captions stay distinct from
+    // observation-point captions in the image too.
+    ctx.fillStyle = getComputedStyle(el).color || '#202124';
     ctx.fillText(el.textContent, x, y);
   });
 
