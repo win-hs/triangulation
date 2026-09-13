@@ -76,11 +76,18 @@
   <!-- ① 計算設定：北向、座標順序、交會算法、估算器 -->
   <div class="section settings">
     <div class="algo-row">
-      <div class="setting-col">
+      <div class="setting-col" id="north-col">
         <div class="section-title">北向</div>
-        <div class="radio-group">
-          <button id="btn-north-true"     class="radio-btn active">真北</button>
-          <button id="btn-north-magnetic" class="radio-btn">磁北</button>
+        <div class="north-line">
+          <div class="radio-group">
+            <button id="btn-north-true"     class="radio-btn active">真北</button>
+            <button id="btn-north-magnetic" class="radio-btn">磁北</button>
+          </div>
+          <div id="date-label" class="date-row" hidden>
+            <span>日期</span>
+            <input type="date" id="date-input">
+            <span id="declination-display" class="inline-note" hidden></span>
+          </div>
         </div>
       </div>
       <div class="setting-col">
@@ -104,11 +111,6 @@
           <button id="btn-est-mle"      class="radio-btn">MLE</button>
         </div>
       </div>
-    </div>
-    <div id="date-label" class="date-row" hidden>
-      <span>日期</span>
-      <input type="date" id="date-input">
-      <span id="declination-display" class="inline-note" hidden></span>
     </div>
   </div>
 

@@ -157,6 +157,7 @@ const resultListEl     = document.getElementById('result-list');
 const errorBannerEl    = document.getElementById('error-banner');
 const dateInputEl      = document.getElementById('date-input');
 const dateLabelEl      = document.getElementById('date-label');
+const northColEl       = document.getElementById('north-col');
 const declEl           = document.getElementById('declination-display');
 
 const btnNorthTrue     = document.getElementById('btn-north-true');
@@ -200,6 +201,9 @@ function updateNorthUI() {
   btnNorthTrue.classList.toggle('active', !mag);
   btnNorthMag.classList.toggle('active', mag);
   dateLabelEl.hidden = !mag;
+  // The date sits beside 磁北, so the column needs the full width while it is
+  // showing; the other settings drop to the next line.
+  northColEl.classList.toggle('magnetic', mag);
   updateDeclinationDisplay();
 }
 

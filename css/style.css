@@ -354,6 +354,10 @@ body {
 .section.settings .algo-row { gap: 9px; align-items: flex-end; }
 #panel > .section.settings:first-of-type { padding-top: 10px; }
 
+/* With 磁北 selected the 北向 column carries the date too, so it needs the
+   whole width; the other three settings drop to the next line. */
+.section.settings .algo-row > #north-col.magnetic { flex-basis: 100%; }
+
 /* ── Radio button group ──────────────────────────────────────────── */
 .radio-group {
   display: flex;
@@ -419,28 +423,37 @@ body {
 
 /* ── Declination note ────────────────────────────────────────────── */
 .inline-note {
-  font-size: 13px;
+  font-size: 11px;
   color: var(--md-dim);
   font-family: monospace;
+  white-space: nowrap;
 }
 
 .inline-note.highlight { color: var(--md-warn); font-weight: 500; }
 
 /* ── Date row ────────────────────────────────────────────────────── */
+/* The date only exists to date the magnetic declination, so it sits on the
+   same line as 真北/磁北 rather than in a row of its own, and matches the
+   segmented buttons' size. */
+.north-line {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
 .date-row {
   display: flex;
   align-items: center;
-  flex-wrap: wrap;
-  gap: 8px;
-  font-size: 13px;
+  gap: 6px;
+  font-size: 11px;
   color: var(--md-on-surface-var);
 }
 
 .date-row input {
-  padding: 3px 6px;
+  padding: 3px 4px;
   border: 1px solid var(--md-field-border);
   border-radius: 4px;
-  font-size: 13px;
+  font-size: 11px;
 }
 
 /* ── Error banner ────────────────────────────────────────────────── */
@@ -980,6 +993,7 @@ body {
     align-items: end;
     justify-items: start;
   }
+  .section.settings .algo-row > #north-col.magnetic { grid-column: 1 / -1; }
   .switch { width: 46px; height: 26px; border-radius: 13px; }
   .switch-thumb { width: 22px; height: 22px; }
   .switch.on .switch-thumb { transform: translateX(20px); }
@@ -992,15 +1006,17 @@ body {
 
   /* Legibility */
   .section-title { font-size: 12px; }
-  .inline-note { font-size: 13px; }
   .result-row { font-size: 15px; }
   /* 16px inputs stop iOS from auto-zooming on focus.
      Must out-specify .station-row input.latlon-input above, hence the class pair. */
   .station-row input.latlon-input,
   .station-row input.az-input,
   .station-row input.name-input,
-  #manual-form input,
-  .date-row input { font-size: 16px; padding: 9px 8px; }
+  #manual-form input { font-size: 16px; padding: 9px 8px; }
+  /* The date opens a picker rather than a keyboard, so it is exempt from the
+     16px anti-zoom rule and matches the segmented buttons instead. */
+  .date-row, .date-row input, .inline-note { font-size: 12px; }
+  .date-row input { padding: 4px 5px; }
   /* Tighten the row's fixed-width parts so the 6-decimal coordinate fits */
   .station-row { gap: 4px; }
   .station-row input.latlon-input { padding-left: 6px; padding-right: 6px; }
