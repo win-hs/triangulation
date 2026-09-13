@@ -208,23 +208,39 @@ function updateNorthUI() {
   updateDeclinationDisplay();
 }
 
+// The date field can be cleared, and new Date('') is Invalid Date.
+function surveyDate() {
+  return state.date ? new Date(state.date) : new Date();
+}
+
+function formatDec(dec) {
+  return `${dec >= 0 ? '+' : ''}${dec.toFixed(2)}°`;
+}
+
+// Declination is not one number for the whole survey — it drifts across the
+// island (about 0.7° from 台北 to 屏東). Each station is corrected with its
+// own value; averaging them for the readout would show a figure that belongs
+// to no actual observation point, so show the span whenever they disagree.
 function updateDeclinationDisplay() {
   if (state.northMode !== 'magnetic') {
     declEl.hidden = true;
     return;
   }
-  // Use average of station positions, or Taiwan center if no stations
-  let lat = 23.97, lon = 121.0;
+  const date = surveyDate();
   const active = activeGroups().flatMap(activeStationsIn);
-  if (active.length > 0) {
-    lat = active.reduce((s, st) => s + st.lat, 0) / active.length;
-    lon = active.reduce((s, st) => s + st.lon, 0) / active.length;
-  }
-  const date = state.date ? new Date(state.date) : new Date();
-  const { dec } = geoMag(lat, lon, 0, date);
-  const sign = dec >= 0 ? '+' : '';
-  declEl.textContent = `偏角 ${sign}${dec.toFixed(2)}°`;
-  declEl.className = 'inline-note' + (Math.abs(dec) > 1 ? ' highlight' : '');
+  const decs = active.length
+    ? active.map(s => geoMag(s.lat, s.lon, 0, date).dec)
+    : [geoMag(23.97, 121.0, 0, date).dec];  // Taiwan centre until there are points
+
+  const min = Math.min(...decs);
+  const max = Math.max(...decs);
+  // Ordered by how much correction it is rather than by sign, so the span
+  // reads from the smallest adjustment to the largest: 屏東 -4.38° 到 台北 -5.06°.
+  const [from, to] = Math.abs(min) <= Math.abs(max) ? [min, max] : [max, min];
+  declEl.textContent = '偏角 ' +
+    (max - min >= 0.05 ? `${formatDec(from)}～${formatDec(to)}` : formatDec(from));
+  declEl.className = 'inline-note' +
+    (Math.max(Math.abs(min), Math.abs(max)) > 1 ? ' highlight' : '');
   declEl.hidden = false;
 }
 
@@ -1185,7 +1201,7 @@ function solveGroup(group) {
   let stations = active;
   if (state.northMode === 'magnetic') {
     try {
-      stations = applyMagneticCorrection(active, state.date);
+      stations = applyMagneticCorrection(active, state.date || todayISO());
     } catch (e) {
       return { error: '磁偏角計算失敗：' + e.message, stations, lineLength: 0 };
     }
@@ -1216,10 +1232,16 @@ function drawGroups(groups) {
     activeStationsIn(group).forEach((s, idx) => {
       const color = stationColorOf(group, s);
       const nameHtml = s.name ? escapeHtml(s.name) : '';
+      // In magnetic mode show this point's own declination — it differs from
+      // the next observer's, and the panel can only show one figure or a span.
+      const azLine = state.northMode === 'magnetic'
+        ? `<br>方位角：${r.stations[idx].azimuth.toFixed(1)}°（真北）` +
+          `<br>磁北 ${s.azimuth.toFixed(1)}°，偏角 ` +
+          formatDec(geoMag(s.lat, s.lon, 0, surveyDate()).dec)
+        : `<br>方位角：${r.stations[idx].azimuth.toFixed(1)}°`;
       const info = `<b>${escapeHtml(groupLabel(group))} #${s.id}` +
         `${nameHtml ? ' ' + nameHtml : ''}</b>` +
-        `<br>座標：${formatLatLon(s.lat, s.lon)}` +
-        `<br>方位角：${r.stations[idx].azimuth.toFixed(1)}°`;
+        `<br>座標：${formatLatLon(s.lat, s.lon)}` + azLine;
       const key = stationKey(group.id, s.id);
       drawStation(s.lat, s.lon, `#${s.id}`, color, key, info, onMarkerSelect, nameHtml);
       drawBearingLine(s.lat, s.lon, r.stations[idx].azimuth, r.lineLength, color, key, info, onMarkerSelect);

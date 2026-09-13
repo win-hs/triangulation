@@ -442,6 +442,7 @@ body {
   display: flex;
   align-items: center;
   gap: 8px;
+  flex-wrap: wrap;   /* a declination span is long; let it drop rather than overflow */
 }
 
 .date-row {
