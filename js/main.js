@@ -26,8 +26,101 @@ let results = new Map();
 // hit by accident.
 let _selected = null;  // { groupId, stationId }
 
+// Closing the tab by accident mid-survey should not lose the points. Kept in
+// this browser only — it does not follow the user to another device. Measured
+// from the last save rather than the calendar day, so a survey running past
+// midnight still picks up where it left off.
+const STORE_KEY = 'triangulation.state.v1';
+const STORE_MAX_AGE = 24 * 60 * 60 * 1000;
+let _saveTimer = null;
+
 function todayISO() {
   return new Date().toISOString().slice(0, 10);
+}
+
+// ── Persistence ────────────────────────────────────────────────────────────
+// Every write is wrapped: private browsing and a full quota both throw, and
+// losing the convenience of a restore must never break the tool itself.
+function scheduleSave() {
+  clearTimeout(_saveTimer);
+  _saveTimer = setTimeout(saveState, 300);
+}
+
+function saveState() {
+  try {
+    localStorage.setItem(STORE_KEY, JSON.stringify({
+      savedAt: Date.now(),
+      groups: state.groups,
+      nextGroupId: state.nextGroupId,
+      multiGroup: state.multiGroup,
+      northMode: state.northMode,
+      coordOrder: state.coordOrder,
+      lineAlgorithm: state.lineAlgorithm,
+      estimator: state.estimator,
+      date: state.date,
+    }));
+  } catch (e) { /* storage unavailable — carry on without it */ }
+}
+
+function forgetState() {
+  try { localStorage.removeItem(STORE_KEY); } catch (e) { /* nothing to do */ }
+}
+
+const num = (v) => (typeof v === 'number' && isFinite(v) ? v : null);
+
+// Anything stored could be from an older build or hand-edited, so rebuild the
+// groups field by field and drop whatever does not make sense.
+function reviveGroups(raw) {
+  if (!Array.isArray(raw)) return [];
+  return raw.map(g => {
+    const stations = (Array.isArray(g.stations) ? g.stations : []).map(s => {
+      const lat = num(s.lat), lon = num(s.lon), azimuth = num(s.azimuth);
+      if (lat === null || lon === null || azimuth === null) return null;
+      return {
+        id: num(s.id) || 1,
+        lat, lon, azimuth,
+        name: typeof s.name === 'string' ? s.name : '',
+        enabled: s.enabled !== false,
+      };
+    }).filter(Boolean);
+    return {
+      id: num(g.id) || 1,
+      name: typeof g.name === 'string' ? g.name : '',
+      enabled: g.enabled !== false,
+      collapsed: g.collapsed === true,
+      showAngles: g.showAngles === true,
+      nextStationId: num(g.nextStationId) ||
+        stations.reduce((m, s) => Math.max(m, s.id), 0) + 1,
+      stations,
+    };
+  });
+}
+
+function loadState() {
+  let saved = null;
+  try { saved = JSON.parse(localStorage.getItem(STORE_KEY)); } catch (e) { saved = null; }
+  if (!saved || typeof saved !== 'object') return false;
+
+  if (!num(saved.savedAt) || Date.now() - saved.savedAt > STORE_MAX_AGE) {
+    forgetState();
+    return false;
+  }
+
+  const groups = reviveGroups(saved.groups);
+  if (!groups.length) return false;
+
+  state.groups = groups;
+  state.nextGroupId = num(saved.nextGroupId) ||
+    groups.reduce((m, g) => Math.max(m, g.id), 0) + 1;
+  state.multiGroup = saved.multiGroup === true;
+  if (saved.northMode === 'magnetic') state.northMode = 'magnetic';
+  if (saved.coordOrder === 'lonlat') state.coordOrder = 'lonlat';
+  if (saved.lineAlgorithm === 'geodesic') state.lineAlgorithm = 'geodesic';
+  if (saved.estimator === 'mle') state.estimator = 'mle';
+  if (typeof saved.date === 'string' && /^\d{4}-\d{2}-\d{2}$/.test(saved.date)) {
+    state.date = saved.date;
+  }
+  return true;
 }
 
 // ── DOM refs ───────────────────────────────────────────────────────────────
@@ -57,12 +150,18 @@ const azPopupCancel    = document.getElementById('az-popup-cancel');
 // ── Init ───────────────────────────────────────────────────────────────────
 initMap('map');
 addFitControl(fitPoints);
+const restored = loadState();  // before the UI reads state, so it shows what was saved
 dateInputEl.value = state.date;
 updateNorthUI();
 updateCoordUI();
 updateAlgoUI();
 updateMultiGroupUI();
-addGroup();  // start with one group so the buttons are there to use
+if (restored) {
+  renderGroupList();
+  recalculate();
+} else {
+  addGroup();  // start with one group so the buttons are there to use
+}
 
 // ── North toggle ───────────────────────────────────────────────────────────
 function updateNorthUI() {
@@ -713,6 +812,7 @@ function renderGroupList() {
   });
 
   applySelection();  // rows were rebuilt, so restore the highlight and 刪除 state
+  scheduleSave();
 }
 
 // One delegated listener for the whole group list — the cards are rebuilt on
@@ -1084,6 +1184,7 @@ function recalculate() {
   fitToPoints(fitPoints());
   renderResults();
   renderGroupSummaries();
+  scheduleSave();
 }
 
 // The map keys markers by "groupId:stationId"; unpack it to sync the list.
