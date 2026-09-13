@@ -204,6 +204,7 @@ function updateNorthUI() {
   // The date sits beside 磁北, so the column needs the full width while it is
   // showing; the other settings drop to the next line.
   northColEl.classList.toggle('magnetic', mag);
+  northColEl.parentElement.classList.toggle('magnetic', mag);
   updateDeclinationDisplay();
 }
 

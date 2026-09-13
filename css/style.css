@@ -137,6 +137,9 @@ body {
   object-fit: contain;
   flex: none;
 }
+/* Black line art on a transparent background — invisible on the dark app bar,
+   so flip it to white. */
+:root[data-theme="dark"] .app-bar-logo { filter: invert(1); }
 
 .app-bar-title {
   font-size: 20px;
@@ -621,7 +624,7 @@ body {
 }
 .station-row.active {
   background: var(--md-primary-container);
-  box-shadow: inset 3px 0 0 var(--md-primary);
+  box-shadow: inset 0 0 0 2px var(--md-primary);
 }
 
 .station-row input.latlon-input {
@@ -993,7 +996,15 @@ body {
     align-items: end;
     justify-items: start;
   }
-  .section.settings .algo-row > #north-col.magnetic { grid-column: 1 / -1; }
+  /* With the date showing, 北向 takes the whole first line and the remaining
+     three settings share the second — tighter buttons so all three fit. */
+  .section.settings .algo-row.magnetic {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 8px;
+  }
+  .section.settings .algo-row.magnetic > #north-col { flex-basis: 100%; }
+  .section.settings .algo-row.magnetic .radio-btn { padding: 5px 8px; }
   .switch { width: 46px; height: 26px; border-radius: 13px; }
   .switch-thumb { width: 22px; height: 22px; }
   .switch.on .switch-thumb { transform: translateX(20px); }
