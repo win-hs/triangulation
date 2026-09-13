@@ -34,6 +34,13 @@ const STORE_KEY = 'triangulation.state.v1';
 const STORE_MAX_AGE = 24 * 60 * 60 * 1000;
 let _saveTimer = null;
 
+// The theme is a standing preference, not survey data: it lives under its own
+// key so it neither expires with the 24-hour window nor disappears when there
+// is no saved survey. null = follow the system setting.
+const THEME_KEY = 'triangulation.theme';
+let darkMode = null;  // null | true | false
+const darkQuery = matchMedia('(prefers-color-scheme: dark)');
+
 function todayISO() {
   return new Date().toISOString().slice(0, 10);
 }
@@ -65,6 +72,27 @@ function saveState() {
 function forgetState() {
   try { localStorage.removeItem(STORE_KEY); } catch (e) { /* nothing to do */ }
 }
+
+// ── Theme ──────────────────────────────────────────────────────────────────
+function isDark() {
+  return darkMode === null ? darkQuery.matches : darkMode;
+}
+
+function applyTheme() {
+  const dark = isDark();
+  document.documentElement.setAttribute('data-theme', dark ? 'dark' : 'light');
+  swDark.classList.toggle('on', dark);
+  swDark.setAttribute('aria-checked', String(dark));
+}
+
+function loadTheme() {
+  let v = null;
+  try { v = localStorage.getItem(THEME_KEY); } catch (e) { v = null; }
+  darkMode = v === 'dark' ? true : v === 'light' ? false : null;
+}
+
+// Until the switch is touched the app tracks the system setting live.
+darkQuery.addEventListener('change', () => { if (darkMode === null) applyTheme(); });
 
 const num = (v) => (typeof v === 'number' && isFinite(v) ? v : null);
 
@@ -140,6 +168,7 @@ const btnLineGeodesic  = document.getElementById('btn-line-geodesic');
 const btnEstMle        = document.getElementById('btn-est-mle');
 const btnEstCentroid   = document.getElementById('btn-est-centroid');
 const swMultiGroup     = document.getElementById('sw-multi-group');
+const swDark           = document.getElementById('sw-dark');
 
 const azPopupEl        = document.getElementById('az-popup');
 const azPopupCoordsEl  = document.getElementById('az-popup-coords');
@@ -150,6 +179,8 @@ const azPopupCancel    = document.getElementById('az-popup-cancel');
 // ── Init ───────────────────────────────────────────────────────────────────
 initMap('map');
 addFitControl(fitPoints);
+loadTheme();
+applyTheme();
 const restored = loadState();  // before the UI reads state, so it shows what was saved
 dateInputEl.value = state.date;
 updateNorthUI();
@@ -377,6 +408,15 @@ resultListEl.addEventListener('click', async e => {
 // pasted image carries the numbers, not just a picture of the map.
 const SNAP_FONT = '"Noto Sans TC", "Microsoft JhengHei", system-ui, sans-serif';
 
+// The exported panel follows the theme. Fixed values rather than the CSS
+// tokens because canvas cannot resolve var(), and these must stay in step with
+// the palette at the top of style.css.
+function snapColors() {
+  return isDark()
+    ? { bg: '#202124', fg: '#e8eaed', dim: '#9aa0a6', rule: '#3c4043', soft: '#2e3134', warn: '#f28b82' }
+    : { bg: '#ffffff', fg: '#202124', dim: '#5f6368', rule: '#e0e0e0', soft: '#eeeeee', warn: '#c5221f' };
+}
+
 // Only checked groups, and inside them only checked stations, reach the image.
 function snapshotSections(groups) {
   return (groups || activeGroups()).map(g => ({
@@ -400,6 +440,7 @@ async function buildSnapshotFor(group) {
 
 async function buildSnapshotCanvas(groups) {
   const mapCanvas = captureMapCanvas();
+  const snap = snapColors();
   const sections = snapshotSections(groups);
   const pad = 14;
   const rowH = 22;
@@ -414,7 +455,7 @@ async function buildSnapshotCanvas(groups) {
   canvas.width = W;
   canvas.height = mapCanvas.height + panelH;
   const ctx = canvas.getContext('2d');
-  ctx.fillStyle = '#fff';
+  ctx.fillStyle = snap.bg;
   ctx.fillRect(0, 0, canvas.width, canvas.height);
   ctx.drawImage(mapCanvas, Math.round((W - mapCanvas.width) / 2), 0);
 
@@ -427,7 +468,7 @@ async function buildSnapshotCanvas(groups) {
     const color = groupColor(group);
 
     if (i > 0) {
-      ctx.strokeStyle = '#eee';
+      ctx.strokeStyle = snap.soft;
       ctx.lineWidth = 1;
       ctx.beginPath();
       ctx.moveTo(pad, y + 0.5);
@@ -444,33 +485,33 @@ async function buildSnapshotCanvas(groups) {
       ctx.arc(pad + 5, y + 8, 5, 0, Math.PI * 2);
       ctx.fillStyle = color;
       ctx.fill();
-      ctx.fillStyle = '#202124';
+      ctx.fillStyle = snap.fg;
       ctx.font = `bold 14px ${SNAP_FONT}`;
       ctx.fillText(groupLabel(group), pad + 16, y);
       y += 20;
     }
 
-    ctx.fillStyle = '#5f6368';
+    ctx.fillStyle = snap.dim;
     ctx.font = `12px ${SNAP_FONT}`;
     ctx.fillText('目標座標', pad, y + 5);
     if (result && result.target) {
-      ctx.fillStyle = '#202124';
+      ctx.fillStyle = snap.fg;
       ctx.font = `bold 17px ${SNAP_FONT}`;
       ctx.fillText(formatLatLon(result.target.lat, result.target.lon), pad + 72, y);
       const minA = result.minAcuteAngle;
       const warn = minA.value < 30;
-      ctx.fillStyle = warn ? '#c5221f' : '#5f6368';
+      ctx.fillStyle = warn ? snap.warn : snap.dim;
       ctx.font = `11px ${SNAP_FONT}`;
       ctx.fillText(`最小銳角 ${minA.value.toFixed(1)}° (#${minA.stationPair[0]}–#${minA.stationPair[1]})` +
         (warn ? ' ⚠ 夾角過小' : ''), pad + 72, y + 20);
     } else {
-      ctx.fillStyle = '#c5221f';
+      ctx.fillStyle = snap.warn;
       ctx.font = `13px ${SNAP_FONT}`;
       ctx.fillText(result && result.error ? result.error : '觀測點不足', pad + 72, y + 2);
     }
     y += headH;
 
-    ctx.fillStyle = '#5f6368';
+    ctx.fillStyle = snap.dim;
     ctx.font = `12px ${SNAP_FONT}`;
     ctx.fillText(`觀測點（${state.coordOrder === 'lonlat' ? '經,緯' : '緯,經'}）`, pad, y);
     y += 18;
@@ -479,7 +520,7 @@ async function buildSnapshotCanvas(groups) {
       const cy = y + rowH / 2;
       ctx.beginPath();
       ctx.arc(pad + 9, cy, 9, 0, Math.PI * 2);
-      ctx.fillStyle = color;
+      ctx.fillStyle = stationColorOf(group, s);
       ctx.fill();
       ctx.textAlign = 'center';
       ctx.textBaseline = 'middle';
@@ -489,12 +530,12 @@ async function buildSnapshotCanvas(groups) {
       ctx.textAlign = 'left';
       let x = pad + 26;
       if (s.name) {
-        ctx.fillStyle = '#202124';
+        ctx.fillStyle = snap.fg;
         ctx.font = `bold 13px ${SNAP_FONT}`;
         ctx.fillText(s.name, x, cy);
         x += ctx.measureText(s.name).width + 10;
       }
-      ctx.fillStyle = '#202124';
+      ctx.fillStyle = snap.fg;
       ctx.font = `13px ${SNAP_FONT}`;
       ctx.fillText(`${formatLatLon(s.lat, s.lon)}　方位角 ${s.azimuth.toFixed(1)}°`, x, cy);
       ctx.textBaseline = 'top';
@@ -503,7 +544,7 @@ async function buildSnapshotCanvas(groups) {
     y += 10;
   });
 
-  ctx.strokeStyle = '#e0e0e0';
+  ctx.strokeStyle = snap.rule;
   ctx.lineWidth = 1;
   ctx.beginPath();
   ctx.moveTo(pad, y + 0.5);
@@ -514,7 +555,7 @@ async function buildSnapshotCanvas(groups) {
   const north = state.northMode === 'magnetic' ? `磁北（${state.date}）` : '真北';
   const algo = state.lineAlgorithm === 'geodesic' ? 'Geodesic' : '平面';
   const est = state.estimator === 'mle' ? 'MLE' : 'Centroid';
-  ctx.fillStyle = '#5f6368';
+  ctx.fillStyle = snap.dim;
   ctx.font = `11px ${SNAP_FONT}`;
   ctx.fillText(`${north} · ${algo} · ${est}`, pad, y);
   ctx.textAlign = 'right';
@@ -624,6 +665,14 @@ function activeStationsIn(group) {
 // they are told apart by the #n badge and the name label.
 function groupColor(group) {
   return stationColor(state.groups.indexOf(group));
+}
+
+// With 多組別模式 on, colour separates the groups. With it off there is only
+// one group and nothing to separate, so colour goes back to telling the
+// observation points apart. Indexed against the full list either way, so
+// unchecking one does not recolour the rest.
+function stationColorOf(group, s) {
+  return state.multiGroup ? groupColor(group) : stationColor(group.stations.indexOf(s));
 }
 
 function groupLabel(group) {
@@ -753,15 +802,15 @@ function stationRowHtml(group, s, coordHint) {
     <div class="station-row${s.enabled ? '' : ' off'}" data-station-id="${s.id}">
       <input type="checkbox" class="station-toggle" title="取消勾選即從地圖與計算中排除"
              ${s.enabled ? 'checked' : ''}>
-      <span class="station-badge" style="background:${groupColor(group)}"
+      <span class="station-badge" style="background:${stationColorOf(group, s)}"
             title="在地圖上定位這一站">#${s.id}</span>
       <input type="text" class="name-input" placeholder="名稱" title="名稱（選填）"
              value="${escapeHtml(s.name)}" data-role="name">
       <input type="text" class="latlon-input" value="${formatLatLon(s.lat, s.lon)}"
              placeholder="${coordHint}" data-role="latlon">
-      <span class="az-label">°</span>
       <input type="number" class="az-input" step="0.1" min="0" max="360"
              value="${s.azimuth}" data-role="azimuth">
+      <span class="az-label">°</span>
     </div>`;
 }
 
@@ -878,6 +927,12 @@ groupListEl.addEventListener('focusin', e => {
 });
 
 document.getElementById('btn-add-group').addEventListener('click', () => addGroup());
+
+swDark.addEventListener('click', () => {
+  darkMode = !isDark();  // first touch turns the system default into a choice
+  try { localStorage.setItem(THEME_KEY, darkMode ? 'dark' : 'light'); } catch (e) { /* not fatal */ }
+  applyTheme();
+});
 
 // ── 多組別模式 toggle ──────────────────────────────────────────────────────
 
@@ -1153,8 +1208,8 @@ function drawGroups(groups) {
   groups.forEach(group => {
     const r = results.get(group.id);
     if (!r) return;
-    const color = groupColor(group);
     activeStationsIn(group).forEach((s, idx) => {
+      const color = stationColorOf(group, s);
       const nameHtml = s.name ? escapeHtml(s.name) : '';
       const info = `<b>${escapeHtml(groupLabel(group))} #${s.id}` +
         `${nameHtml ? ' ' + nameHtml : ''}</b>` +

@@ -11,16 +11,20 @@ const PALETTE = [
 // crossOrigin lets captureMapCanvas() read the tiles back out of the DOM —
 // without it the snapshot canvas is tainted and cannot be exported as PNG.
 // All three tile hosts send Access-Control-Allow-Origin: *.
+// tiles-dimmable marks the street basemaps that invert cleanly in dark mode.
+// Esri's imagery is left out: inverted aerial photography is unreadable.
 const BASE_LAYERS = {
   'OpenStreetMap': L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
     attribution: '© OpenStreetMap contributors',
     maxZoom: 19,
     crossOrigin: 'anonymous',
+    className: 'tiles-dimmable',
   }),
   'OpenTopoMap': L.tileLayer('https://{s}.tile.opentopomap.org/{z}/{x}/{y}.png', {
     attribution: '© OpenTopoMap contributors',
     maxZoom: 17,
     crossOrigin: 'anonymous',
+    className: 'tiles-dimmable',
   }),
   'Esri Imagery': L.tileLayer(
     'https://server.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer/tile/{z}/{y}/{x}',
@@ -233,7 +237,9 @@ function captureMapCanvas() {
   canvas.width = Math.round(box.width);
   canvas.height = Math.round(box.height);
   const ctx = canvas.getContext('2d');
-  ctx.fillStyle = '#e8e8e8';
+  // Shows through wherever a tile has not loaded; follow the map's own backdrop
+  // so it is not a light patch in dark mode.
+  ctx.fillStyle = getComputedStyle(container).backgroundColor || '#e8e8e8';
   ctx.fillRect(0, 0, canvas.width, canvas.height);
 
   // Tiles. Leaflet keeps one container per zoom level while zooming; paint
@@ -241,12 +247,19 @@ function captureMapCanvas() {
   const levels = Array.from(container.querySelectorAll('.leaflet-tile-container'))
     .sort((a, b) => (parseInt(a.style.zIndex) || 0) - (parseInt(b.style.zIndex) || 0));
   levels.forEach(level => {
+    // A CSS filter applies to the rendered page, not to the image data, so the
+    // dark-mode inversion has to be re-applied here. Reading it back off the
+    // layer keeps the snapshot identical to what is on screen.
+    const layer = level.closest('.tiles-dimmable');
+    const filter = layer ? getComputedStyle(layer).filter : 'none';
+    ctx.filter = filter && filter !== 'none' ? filter : 'none';
     level.querySelectorAll('img.leaflet-tile-loaded').forEach(img => {
       const r = img.getBoundingClientRect();
       try {
         ctx.drawImage(img, r.left - box.left, r.top - box.top, r.width, r.height);
       } catch (e) { /* tile not decodable — leave the background showing */ }
     });
+    ctx.filter = 'none';
   });
 
   // Bearing lines and intersection dots. Redrawn through Leaflet's own
@@ -290,7 +303,8 @@ function captureMapCanvas() {
     if (el.classList.contains('target-marker')) {
       const d = 8;
       ctx.lineCap = 'round';
-      [['#fff', 6], ['#e00', 3]].forEach(([color, width]) => {
+      const halo = getComputedStyle(el).getPropertyValue('--label-halo').trim() || '#fff';
+      [[halo, 6], ['#e00', 3]].forEach(([color, width]) => {
         ctx.strokeStyle = color;
         ctx.lineWidth = width;
         ctx.beginPath();
@@ -323,7 +337,7 @@ function captureMapCanvas() {
     const x = r.left - box.left;
     const y = r.top - box.top + r.height / 2;
     ctx.lineWidth = 4;
-    ctx.strokeStyle = '#fff';
+    ctx.strokeStyle = getComputedStyle(el).getPropertyValue('--label-halo').trim() || '#fff';
     ctx.strokeText(el.textContent, x, y);
     // Take the colour from the DOM so target captions stay distinct from
     // observation-point captions in the image too.

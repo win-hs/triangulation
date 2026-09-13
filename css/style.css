@@ -1,18 +1,42 @@
 /* 無線電追蹤三角定位工具 — style.css */
 
-/* Google Material Design tokens */
+/* Google Material Design tokens.
+   Every colour of the app's chrome comes from here so the dark palette below
+   only has to restate the values. Colours that sit on the map itself — marker
+   badges, name captions, the target cross — are deliberately NOT tokenised:
+   they have to stay readable over satellite imagery in either theme. */
 :root {
+  color-scheme: light;
   --md-primary: #1a73e8;
   --md-primary-hover: #1765cc;
+  --md-primary-active: #185abc;
   --md-primary-container: #e8f0fe;
   --md-on-primary: #ffffff;
   --md-surface: #ffffff;
   --md-surface-1: #f8f9fa;
+  --md-surface-2: #fafafa;
   --md-outline: #dadce0;
+  --md-divider: #eee;
+  --md-field-border: #ccc;
   --md-on-surface: #202124;
+  --md-text-2: #444;
   --md-on-surface-var: #5f6368;
+  --md-dim-2: #777;
+  --md-dim: #999;
   --md-error: #d93025;
+  --md-error-bg: #fee;
+  --md-error-border: #fcc;
+  --md-error-fg: #c00;
   --md-warn: #e37400;
+  --md-danger-border: #e88;
+  --md-danger-bg: #fff0f0;
+  --md-danger-bg-hover: #ffe0e0;
+  --md-switch-off: #bdc1c6;
+  --md-hover: rgba(26,115,232,.08);
+  --md-hover-strong: rgba(26,115,232,.16);
+  --md-hover-neutral: rgba(60,64,67,.06);
+  --md-danger-hover: rgba(217,48,37,.08);
+  --md-focus-ring: rgba(26,115,232,.25);
   --radius: 8px;
   --md-shadow-1: 0 1px 2px 0 rgba(60,64,67,.30), 0 1px 3px 1px rgba(60,64,67,.15);
   --md-shadow-2: 0 1px 2px 0 rgba(60,64,67,.30), 0 2px 6px 2px rgba(60,64,67,.15);
@@ -20,7 +44,57 @@
   --font-mono: "Roboto Mono", monospace;
 }
 
+:root[data-theme="dark"] {
+  color-scheme: dark;   /* date picker, checkboxes and scrollbars follow along */
+  --md-primary: #8ab4f8;
+  --md-primary-hover: #aecbfa;
+  --md-primary-active: #6a9ef0;
+  --md-primary-container: #1e3a5f;
+  --md-on-primary: #202124;
+  --md-surface: #202124;
+  --md-surface-1: #17181a;
+  --md-surface-2: #26282b;
+  --md-outline: #3c4043;
+  --md-divider: #303134;
+  --md-field-border: #5f6368;
+  --md-on-surface: #e8eaed;
+  --md-text-2: #d2d5d9;
+  --md-on-surface-var: #9aa0a6;
+  --md-dim-2: #9aa0a6;
+  --md-dim: #80868b;
+  --md-error: #f28b82;
+  --md-error-bg: #3b2220;
+  --md-error-border: #5c2f2b;
+  --md-error-fg: #f28b82;
+  --md-warn: #fdd663;
+  --md-danger-border: #5c2f2b;
+  --md-danger-bg: #2e2222;
+  --md-danger-bg-hover: #3d2a2a;
+  --md-switch-off: #5f6368;
+  --md-hover: rgba(138,180,248,.12);
+  --md-hover-strong: rgba(138,180,248,.20);
+  --md-hover-neutral: rgba(232,234,237,.08);
+  --md-danger-hover: rgba(242,139,130,.12);
+  --md-focus-ring: rgba(138,180,248,.30);
+  --md-shadow-1: 0 1px 2px 0 rgba(0,0,0,.5), 0 1px 3px 1px rgba(0,0,0,.3);
+  --md-shadow-2: 0 1px 2px 0 rgba(0,0,0,.5), 0 2px 6px 2px rgba(0,0,0,.3);
+}
+
+/* Street basemaps invert into a usable dark map; satellite imagery does not,
+   so the filter is opt-in per tile layer via its className. */
+:root[data-theme="dark"] .tiles-dimmable {
+  filter: invert(1) hue-rotate(180deg) brightness(.92) contrast(.95);
+}
+:root[data-theme="dark"] .leaflet-container { background: var(--md-surface-1); }
+
 *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+
+/* Inputs default to a white system background, which would stay white in dark
+   mode; pin them to the surface tokens instead. */
+input[type="text"], input[type="number"], input[type="date"] {
+  background: var(--md-surface);
+  color: var(--md-on-surface);
+}
 [hidden] { display: none !important; }
 :focus-visible { outline: 2px solid var(--md-primary); outline-offset: 2px; }
 
@@ -96,8 +170,8 @@ body {
   cursor: pointer;
   transition: background-color .15s ease;
 }
-.md-btn:hover { background: rgba(26,115,232,.08); }
-.md-btn:active { background: rgba(26,115,232,.16); }
+.md-btn:hover { background: var(--md-hover); }
+.md-btn:active { background: var(--md-hover-strong); }
 .md-btn svg { width: 18px; height: 18px; fill: currentColor; flex: none; }
 
 /* Visit counter chip */
@@ -145,7 +219,7 @@ body {
 }
 
 #az-popup-inner {
-  background: #fff;
+  background: var(--md-surface);
   border-radius: 8px;
   padding: 16px 20px;
   box-shadow: 0 4px 20px rgba(0,0,0,0.3);
@@ -157,7 +231,7 @@ body {
 
 #az-popup-coords {
   font-size: 12px;
-  color: #666;
+  color: var(--md-on-surface-var);
   font-family: monospace;
 }
 
@@ -165,13 +239,13 @@ body {
   display: flex;
   flex-direction: column;
   font-size: 14px;
-  color: #444;
+  color: var(--md-text-2);
   gap: 4px;
 }
 
 #az-popup-input {
   padding: 6px 8px;
-  border: 1px solid #ccc;
+  border: 1px solid var(--md-field-border);
   border-radius: 4px;
   font-size: 16px;
   width: 100%;
@@ -235,7 +309,7 @@ body {
   flex-direction: column;
   gap: 8px;
   padding: 12px 0;
-  border-bottom: 1px solid #eee;
+  border-bottom: 1px solid var(--md-divider);
 }
 
 .section:first-child { padding-top: 4px; }
@@ -247,12 +321,6 @@ body {
   color: var(--md-on-surface-var);
   text-transform: uppercase;
   letter-spacing: 0.08em;
-}
-
-.sub-label {
-  font-size: 11px;
-  color: #999;
-  margin-bottom: 3px;
 }
 
 .control-row {
@@ -283,8 +351,7 @@ body {
   padding: 7px 0;
 }
 .section.settings .section-title { font-size: 10px; }
-.section.settings .sub-label { font-size: 10px; margin-bottom: 2px; }
-.section.settings .algo-row { gap: 12px; align-items: flex-end; }
+.section.settings .algo-row { gap: 9px; align-items: flex-end; }
 #panel > .section.settings:first-of-type { padding-top: 10px; }
 
 /* ── Radio button group ──────────────────────────────────────────── */
@@ -293,7 +360,8 @@ body {
 }
 
 .radio-btn {
-  padding: 3px 10px;
+  padding: 3px 7px;
+  line-height: 16px;   /* fixed, or Latin-only labels render a shorter box than CJK */
   border: 1px solid var(--md-outline);
   background: var(--md-surface);
   color: var(--md-on-surface-var);
@@ -318,7 +386,7 @@ body {
   z-index: 1;
 }
 
-.radio-btn:not(.active):hover { background: rgba(60,64,67,.06); }
+.radio-btn:not(.active):hover { background: var(--md-hover-neutral); }
 
 /* ── Toggle switch (多組別模式 only) ─────────────────────────────── */
 .switch {
@@ -329,7 +397,7 @@ body {
   padding: 0;
   border: none;
   border-radius: 10px;
-  background: #bdc1c6;
+  background: var(--md-switch-off);
   cursor: pointer;
   transition: background .18s ease;
 }
@@ -352,7 +420,7 @@ body {
 /* ── Declination note ────────────────────────────────────────────── */
 .inline-note {
   font-size: 13px;
-  color: #888;
+  color: var(--md-dim);
   font-family: monospace;
 }
 
@@ -365,21 +433,21 @@ body {
   flex-wrap: wrap;
   gap: 8px;
   font-size: 13px;
-  color: #555;
+  color: var(--md-on-surface-var);
 }
 
 .date-row input {
   padding: 3px 6px;
-  border: 1px solid #ccc;
+  border: 1px solid var(--md-field-border);
   border-radius: 4px;
   font-size: 13px;
 }
 
 /* ── Error banner ────────────────────────────────────────────────── */
 #error-banner {
-  background: #fee;
-  color: #c00;
-  border: 1px solid #fcc;
+  background: var(--md-error-bg);
+  color: var(--md-error-fg);
+  border: 1px solid var(--md-error-border);
   border-radius: 4px;
   padding: 6px 10px;
   font-size: 13px;
@@ -439,15 +507,15 @@ body {
   font-weight: 500;
   font-family: inherit;
 }
-.group-card input.group-name:hover  { border-color: #ddd; }
-.group-card input.group-name:focus  { border-color: #ccc; background: #fff; outline: none; }
+.group-card input.group-name:hover  { border-color: var(--md-outline); }
+.group-card input.group-name:focus  { border-color: var(--md-field-border); background: var(--md-surface); outline: none; }
 
 /* The summary only earns its space when the body is hidden. */
 .group-summary { display: none; }
 .group-card.collapsed .group-summary {
   display: inline;
   font-size: 11px;
-  color: #5f6368;
+  color: var(--md-on-surface-var);
   white-space: nowrap;
 }
 .group-card.collapsed .group-body { display: none; }
@@ -455,7 +523,7 @@ body {
 .group-collapse {
   border: none;
   background: none;
-  color: #5f6368;
+  color: var(--md-on-surface-var);
   cursor: pointer;
   font-size: 11px;
   padding: 2px 3px;
@@ -508,7 +576,7 @@ body {
   width: 56px;
   flex: 0 0 auto;
   padding: 4px 5px;
-  border: 1px solid #ccc;
+  border: 1px solid var(--md-field-border);
   border-radius: 4px;
   font-size: 13px;
   min-width: 0;
@@ -531,7 +599,7 @@ body {
   cursor: pointer;
   transition: transform .15s ease-out, box-shadow .15s ease-out;
 }
-.station-badge:hover { transform: scale(1.12); box-shadow: 0 0 0 3px rgba(26,115,232,.25); }
+.station-badge:hover { transform: scale(1.12); box-shadow: 0 0 0 3px var(--md-focus-ring); }
 
 .station-row {
   border-radius: var(--radius);
@@ -546,7 +614,7 @@ body {
 .station-row input.latlon-input {
   flex: 1;
   padding: 4px 5px;
-  border: 1px solid #ccc;
+  border: 1px solid var(--md-field-border);
   border-radius: 4px;
   font-size: 13px;
   min-width: 0;
@@ -555,7 +623,7 @@ body {
 .station-row input.az-input {
   width: 56px;
   padding: 4px 5px;
-  border: 1px solid #ccc;
+  border: 1px solid var(--md-field-border);
   border-radius: 4px;
   font-size: 13px;
   text-align: right;
@@ -563,22 +631,22 @@ body {
 
 .az-label {
   font-size: 11px;
-  color: #999;
+  color: var(--md-dim);
   flex-shrink: 0;
 }
 
 .btn-delete {
   padding: 3px 5px;
-  border: 1px solid #e88;
+  border: 1px solid var(--md-danger-border);
   border-radius: 4px;
-  background: #fff0f0;
-  color: #c00;
+  background: var(--md-danger-bg);
+  color: var(--md-error-fg);
   cursor: pointer;
   font-size: 12px;
   flex-shrink: 0;
 }
 
-.btn-delete:hover { background: #ffe0e0; }
+.btn-delete:hover { background: var(--md-danger-bg-hover); }
 
 /* ── Action buttons ──────────────────────────────────────────────── */
 /* All four actions stay on one row, so they share the width evenly. */
@@ -601,8 +669,8 @@ body {
   cursor: pointer;
   transition: background .15s ease;
 }
-.btn-action:hover { background: rgba(26,115,232,.08); }
-.btn-action:active { background: rgba(26,115,232,.16); }
+.btn-action:hover { background: var(--md-hover); }
+.btn-action:active { background: var(--md-hover-strong); }
 
 /* 刪除 stays visibly out of reach until a row is selected. */
 .btn-action:disabled {
@@ -617,7 +685,7 @@ body {
   background: var(--md-surface);
 }
 
-.btn-action.danger:hover { background: rgba(217,48,37,.08); }
+.btn-action.danger:hover { background: var(--md-danger-hover); }
 
 /* ── Manual form ─────────────────────────────────────────────────── */
 #manual-form {
@@ -625,8 +693,8 @@ body {
   flex-direction: column;
   gap: 7px;
   padding: 10px 12px;
-  background: #fafafa;
-  border: 1px solid #eee;
+  background: var(--md-surface-2);
+  border: 1px solid var(--md-divider);
   border-radius: 6px;
 }
 
@@ -634,13 +702,13 @@ body {
   display: flex;
   flex-direction: column;
   font-size: 12px;
-  color: #555;
+  color: var(--md-on-surface-var);
   gap: 3px;
 }
 
 #manual-form input {
   padding: 5px 7px;
-  border: 1px solid #ccc;
+  border: 1px solid var(--md-field-border);
   border-radius: 4px;
   font-size: 14px;
 }
@@ -660,7 +728,7 @@ body {
 }
 
 .result-label {
-  color: #777;
+  color: var(--md-dim-2);
   flex-shrink: 0;
   min-width: 68px;
 }
@@ -681,7 +749,7 @@ body {
 }
 
 .result-group { display: flex; flex-direction: column; gap: 3px; }
-.result-group + .result-group { border-top: 1px solid #eee; padding-top: 8px; }
+.result-group + .result-group { border-top: 1px solid var(--md-divider); padding-top: 8px; }
 
 .result-group .result-row { align-items: center; }
 .result-group .result-label { min-width: 0; color: var(--md-on-surface); font-weight: 500; }
@@ -694,11 +762,11 @@ body {
   font-size: 12px;
   padding-left: 18px;
 }
-.result-sub .result-label { min-width: 0; font-weight: 400; color: #777; }
+.result-sub .result-label { min-width: 0; font-weight: 400; color: var(--md-dim-2); }
 .result-sub .result-value { font-size: 12px; }
 .result-sub .link-btn { margin-left: auto; font-size: 11px; white-space: nowrap; }
 
-.result-value.muted { color: #999; font-weight: 400; }
+.result-value.muted { color: var(--md-dim); font-weight: 400; }
 
 .result-actions-row {
   display: flex;
@@ -732,7 +800,7 @@ body {
   transition: background 0.15s;
 }
 
-.btn-result-action:hover { background: rgba(26,115,232,.08); }
+.btn-result-action:hover { background: var(--md-hover); }
 
 /* ── Link-style button ───────────────────────────────────────────── */
 .link-btn {
@@ -752,19 +820,19 @@ body {
 /* ── Help ────────────────────────────────────────────────────────── */
 #help-body {
   font-size: 13px;
-  color: #555;
+  color: var(--md-on-surface-var);
   line-height: 1.65;
 }
 
 #help-body dt {
   font-weight: 600;
-  color: #333;
+  color: var(--md-text-2);
   margin-top: 8px;
 }
 
 #help-body dd {
   margin-left: 10px;
-  color: #666;
+  color: var(--md-on-surface-var);
 }
 
 /* ── Angles table ────────────────────────────────────────────────── */
@@ -774,7 +842,7 @@ body {
   margin-top: 4px;
 }
 
-.all-angles td { padding: 2px 14px 2px 0; color: #444; }
+.all-angles td { padding: 2px 14px 2px 0; color: var(--md-text-2); }
 
 /* ── Panel bottom spacer ─────────────────────────────────────────── */
 .panel-spacer { height: 16px; flex-shrink: 0; }
@@ -796,7 +864,7 @@ body {
 }
 
 .btn-primary:hover { background: var(--md-primary-hover); box-shadow: var(--md-shadow-1); }
-.btn-primary:active { background: #185abc; }
+.btn-primary:active { background: var(--md-primary-active); }
 
 .btn-secondary {
   padding: 0 20px;
@@ -811,7 +879,7 @@ body {
   font-weight: 500;
   transition: background .15s ease;
 }
-.btn-secondary:hover { background: rgba(26,115,232,.08); }
+.btn-secondary:hover { background: var(--md-hover); }
 
 /* ── Leaflet custom markers ──────────────────────────────────────── */
 .station-marker {
@@ -838,6 +906,7 @@ body {
 /* Name caption beside a station marker. The heavy white halo is what keeps it
    readable on satellite imagery, where plain dark text disappears. */
 .station-label {
+  --label-halo: #fff;   /* read back by captureMapCanvas so the PNG matches */
   position: absolute;
   left: 34px;
   top: 5px;
@@ -846,16 +915,22 @@ body {
   font-weight: 700;
   color: #202124;
   text-shadow:
-    -2px -2px 3px #fff,  2px -2px 3px #fff,
-    -2px  2px 3px #fff,  2px  2px 3px #fff,
-     0 0 5px #fff, 0 0 7px #fff;
+    -2px -2px 3px var(--label-halo),  2px -2px 3px var(--label-halo),
+    -2px  2px 3px var(--label-halo),  2px  2px 3px var(--label-halo),
+     0 0 5px var(--label-halo), 0 0 7px var(--label-halo);
   pointer-events: none;
 }
+
+/* On the inverted basemap a white halo swallows the dark text, so the caption
+   flips to light-on-dark. Satellite imagery is dark in both themes, so this
+   stays readable there too. */
+:root[data-theme="dark"] .station-label { --label-halo: #000; color: #e8eaed; }
 
 /* The group caption sits beside the target cross. It must not read as another
    observation point, so it takes the target's red rather than the observers'
    dark grey. */
 .station-label.target-label { color: #c5221f; }
+:root[data-theme="dark"] .station-label.target-label { color: #ff8a80; }
 
 .target-marker {
   width: 24px;
@@ -865,8 +940,10 @@ body {
   font-weight: 900;
   text-align: center;
   line-height: 24px;
-  text-shadow: 0 0 3px #fff, 0 0 6px #fff;
+  --label-halo: #fff;
+  text-shadow: 0 0 3px var(--label-halo), 0 0 6px var(--label-halo);
 }
+:root[data-theme="dark"] .target-marker { --label-halo: #000; }
 
 /* ── Mobile: stack map above panel; the 360px side panel cannot fit ──── */
 @media (max-width: 768px) {
@@ -894,6 +971,15 @@ body {
      desktop's compact size rather than the 44px touch target the action
      buttons below get. */
   .radio-btn { padding: 5px 11px; font-size: 12px; }
+  /* Four segmented controls need ~460px; a phone has ~343. Rather than let
+     them wrap 3+1, lay them out as an even 2x2. */
+  .section.settings .algo-row {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 8px 10px;
+    align-items: end;
+    justify-items: start;
+  }
   .switch { width: 46px; height: 26px; border-radius: 13px; }
   .switch-thumb { width: 22px; height: 22px; }
   .switch.on .switch-thumb { transform: translateX(20px); }
@@ -906,7 +992,6 @@ body {
 
   /* Legibility */
   .section-title { font-size: 12px; }
-  .sub-label { font-size: 12px; }
   .inline-note { font-size: 13px; }
   .result-row { font-size: 15px; }
   /* 16px inputs stop iOS from auto-zooming on focus.

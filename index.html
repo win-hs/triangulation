@@ -73,7 +73,7 @@
   <!-- Error banner (floats above sections when visible) -->
   <div id="error-banner" hidden></div>
 
-  <!-- ① 北向 ＋ 座標輸入順序 -->
+  <!-- ① 計算設定：北向、座標順序、交會算法、估算器 -->
   <div class="section settings">
     <div class="algo-row">
       <div class="setting-col">
@@ -91,11 +91,18 @@
         </div>
       </div>
       <div class="setting-col">
-        <div class="section-title">多組別模式</div>
-        <button id="sw-multi-group" class="switch" role="switch" aria-checked="false"
-                aria-label="多組別模式">
-          <span class="switch-thumb"></span>
-        </button>
+        <div class="section-title">交會算法</div>
+        <div class="radio-group">
+          <button id="btn-line-planar"   class="radio-btn active">平面</button>
+          <button id="btn-line-geodesic" class="radio-btn">Geodesic</button>
+        </div>
+      </div>
+      <div class="setting-col">
+        <div class="section-title">估算器</div>
+        <div class="radio-group">
+          <button id="btn-est-centroid" class="radio-btn active">Centroid</button>
+          <button id="btn-est-mle"      class="radio-btn">MLE</button>
+        </div>
       </div>
     </div>
     <div id="date-label" class="date-row" hidden>
@@ -105,25 +112,26 @@
     </div>
   </div>
 
-  <!-- ② 計算方法 -->
+  <!-- ② 介面模式 -->
   <div class="section settings">
     <div class="algo-row">
-      <div>
-        <div class="sub-label">交會算法</div>
-        <div class="radio-group">
-          <button id="btn-line-planar"   class="radio-btn active">平面</button>
-          <button id="btn-line-geodesic" class="radio-btn">Geodesic</button>
-        </div>
+      <div class="setting-col">
+        <div class="section-title">多組別模式</div>
+        <button id="sw-multi-group" class="switch" role="switch" aria-checked="false"
+                aria-label="多組別模式">
+          <span class="switch-thumb"></span>
+        </button>
       </div>
-      <div>
-        <div class="sub-label">估算器</div>
-        <div class="radio-group">
-          <button id="btn-est-centroid" class="radio-btn active">Centroid</button>
-          <button id="btn-est-mle"      class="radio-btn">MLE</button>
-        </div>
+      <div class="setting-col">
+        <div class="section-title">深色模式</div>
+        <button id="sw-dark" class="switch" role="switch" aria-checked="false"
+                aria-label="深色模式">
+          <span class="switch-thumb"></span>
+        </button>
       </div>
     </div>
   </div>
+
 
   <!-- ③ 觀測點 -->
   <div class="section">
