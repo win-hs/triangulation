@@ -41,10 +41,6 @@ const THEME_KEY = 'triangulation.theme';
 let darkMode = null;  // null | true | false
 const darkQuery = matchMedia('(prefers-color-scheme: dark)');
 
-// Language is a standing preference like the theme, and it also decides how
-// far the map may roam: tw stays over Taiwan, en is worldwide.
-const LANG_KEY = 'triangulation.lang';
-
 function todayISO() {
   return new Date().toISOString().slice(0, 10);
 }
@@ -99,25 +95,10 @@ function loadTheme() {
 darkQuery.addEventListener('change', () => { if (darkMode === null) applyTheme(); });
 
 // ── Language ───────────────────────────────────────────────────────────────
-// A page may declare its own language (the /en/ entry exists so link previews
-// are in English); that wins over the stored preference, because opening that
-// URL is a more explicit request than a choice made on an earlier visit.
+// The URL is the only source of language: the root is Chinese, /en/ is English.
+// Nothing is remembered, so a link always opens in the language it names.
 function loadLang() {
-  if (window.PAGE_LANG) { setLang(window.PAGE_LANG); return; }
-  let v = null;
-  try { v = localStorage.getItem(LANG_KEY); } catch (e) { v = null; }
-  setLang(v === 'en' ? 'en' : 'tw');
-}
-
-function applyLang() {
-  applyStaticStrings();
-  langCodeEl.textContent = currentLang().toUpperCase();
-  document.getElementById('help-toggle').textContent = t(state.showHelp ? 'helpClose' : 'helpOpen');
-  setMapArea(currentLang() === 'tw' ? TW_BOUNDS : null);
-  updateNorthUI();       // the declination label carries a translated word
-  updateCoordUI();       // manual-form placeholder
-  renderGroupList();     // rows are built from strings
-  recalculate();         // popups, results and the out-of-area note
+  setLang(window.PAGE_LANG === 'en' ? 'en' : 'tw');
 }
 
 const num = (v) => (typeof v === 'number' && isFinite(v) ? v : null);
@@ -984,10 +965,14 @@ document.getElementById('btn-add-group').addEventListener('click', () => addGrou
 
 // Registered here, not up in the Language section: everything above the DOM
 // refs block runs before those consts exist.
+// Switching language moves to that language's page rather than swapping strings
+// in place, so the address bar always matches what is on screen and a shared
+// link opens in the language the sender saw. Relative targets keep this working
+// on a project Pages path and on a local server alike. The survey survives the
+// reload through localStorage, but the pending debounced write would not.
 btnLangEl.addEventListener('click', () => {
-  setLang(currentLang() === 'tw' ? 'en' : 'tw');
-  try { localStorage.setItem(LANG_KEY, currentLang()); } catch (e) { /* not fatal */ }
-  applyLang();
+  saveState();
+  location.href = currentLang() === 'tw' ? 'en/' : '../';
 });
 
 swDark.addEventListener('click', () => {
