@@ -152,7 +152,8 @@ function drawTarget(lat, lon, labelHtml) {
     iconAnchor: [12, 12],
   });
   L.marker([lat, lon], { icon })
-    .bindPopup(`${labelHtml ? labelHtml + ' ' : ''}目標: ${lat.toFixed(6)}, ${lon.toFixed(6)}`)
+    .bindPopup(`${labelHtml ? labelHtml + ' ' : ''}${t('popupTarget')}: ` +
+      `${lat.toFixed(6)}, ${lon.toFixed(6)}`)
     .addTo(overlayGroup);
 }
 
@@ -169,10 +170,39 @@ function drawIntersection(lat, lon) {
   }).addTo(overlayGroup);
 }
 
+// The Taiwan build pins the map over Taiwan and its waters; the international
+// build roams freely. area = {south, west, north, east} or null for the world.
+let mapArea = null;
+
+function setMapArea(area) {
+  mapArea = area || null;
+  if (!map) return;
+  if (!mapArea) {
+    map.setMaxBounds(null);
+    map.setMinZoom(0);
+    return;
+  }
+  const bounds = L.latLngBounds(
+    [mapArea.south, mapArea.west], [mapArea.north, mapArea.east]);
+  map.setMaxBounds(bounds);
+  // Without a floor the user can zoom out far enough to see the whole globe
+  // inside the bounds, which defeats the point of having them.
+  map.setMinZoom(map.getBoundsZoom(bounds));
+  if (!bounds.contains(map.getCenter())) map.fitBounds(bounds);
+}
+
+function inMapArea(lat, lon) {
+  if (!mapArea) return true;
+  return lat >= mapArea.south && lat <= mapArea.north &&
+         lon >= mapArea.west && lon <= mapArea.east;
+}
+
 /**
- * Fit map view to all visible points.
+ * Fit map view to all visible points. Points outside the permitted area are
+ * dropped from the framing, so an off-target fix never drags the view away.
  */
 function fitToPoints(points) {
+  points = points.filter(p => inMapArea(p.lat, p.lon));
   if (!points.length) return;
   // A single point has no extent — fitBounds would slam to max zoom.
   if (points.length === 1) {
@@ -195,7 +225,7 @@ function addFitControl(getPoints) {
       const div = L.DomUtil.create('div', 'leaflet-bar leaflet-control');
       const a = L.DomUtil.create('a', 'fit-control', div);
       a.href = '#';
-      a.title = '縮放到剛好看得見全部觀測點與目標';
+      a.title = t('fitTitle');
       a.setAttribute('role', 'button');
       a.innerHTML = '<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M15.5 14h-.79l-.28-.27A6.47 6.47 0 0 0 16 9.5 6.5 6.5 0 1 0 9.5 16c1.61 0 3.09-.59 4.23-1.57l.27.28v.79l5 4.99L20.49 19l-4.99-5zm-6 0C7.01 14 5 11.99 5 9.5S7.01 5 9.5 5 14 7.01 14 9.5 11.99 14 9.5 14z"/></svg>';
       L.DomEvent.disableClickPropagation(div);

@@ -3,11 +3,11 @@
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>Triangulation：三角定位工具</title>
-  <meta name="description" content="無線電追蹤三角定位工具，在地圖上輸入觀測點座標與方位角，自動計算目標位置並顯示方位線與交會點。支援真北/磁北、平面/Geodesic 交會、Centroid/MLE 估算。">
+  <title>Triangulation：野生動物 VHF 定位工具</title>
+  <meta name="description" content="Triangulation：野生動物 VHF 定位工具。輸入各觀測點的座標與方位角，自動交會計算目標位置，並在地圖上顯示方位線與交會點。支援真北／磁北、平面／Geodesic 交會、Centroid／MLE 估算。">
   <link rel="canonical" href="https://win-hs.github.io/triangulation/">
-  <meta property="og:title" content="Triangulation：三角定位工具">
-  <meta property="og:description" content="輸入觀測點座標與方位角，自動計算目標位置並視覺化顯示於地圖。">
+  <meta property="og:title" content="Triangulation：野生動物 VHF 定位工具">
+  <meta property="og:description" content="輸入各觀測點的座標與方位角，自動交會計算目標位置，並在地圖上顯示方位線與交會點。">
   <meta property="og:type" content="website">
   <meta property="og:url" content="https://win-hs.github.io/triangulation/">
   <meta property="og:locale" content="zh_TW">
@@ -23,6 +23,7 @@
   <script src="https://unpkg.com/@turf/turf@6.5.0/turf.min.js"></script>
 
   <!-- geomag.js (WMM2025 magnetic declination, self-hosted) -->
+  <script src="js/i18n.js"></script>
   <script src="js/geomag.js"></script>
 
   <link rel="stylesheet" href="css/style.css">
@@ -33,18 +34,26 @@
 <header class="app-bar">
   <div class="app-bar-brand">
     <img class="app-bar-logo" src="logo.png" alt="">
-    <h1 class="app-bar-title">Triangulation：三角定位工具</h1>
+    <h1 class="app-bar-title">
+      <span class="title-full" data-i18n="appTitle">Triangulation：野生動物 VHF 定位工具</span>
+      <span class="title-short" data-i18n="appShort">Triangulation</span>
+    </h1>
   </div>
   <nav class="app-bar-actions">
     <a class="md-btn" href="https://win-hs.github.io/portfolio/field-box/">
       <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M20 11H7.8l5.6-5.6L12 4l-8 8 8 8 1.4-1.4L7.8 13H20v-2z"/></svg>
-      返回 Field-Box 首頁
+      <span data-i18n="backHome">返回 Field-Box 首頁</span>
     </a>
     <a class="md-btn" href="mailto:a.wen90@gmail.com?subject=Field-Box%20%E5%9B%9E%E5%A0%B1%EF%BC%9ATriangulation">
       <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M20 4H4c-1.1 0-2 .9-2 2v12c0 1.1.9 2 2 2h16c1.1 0 2-.9 2-2V6c0-1.1-.9-2-2-2zm0 4-8 5-8-5V6l8 5 8-5v2z"/></svg>
-      回報問題
+      <span data-i18n="report">回報問題</span>
     </a>
-    <span class="visit-chip">總造訪次數<b id="visits">--------</b></span>
+    <span class="visit-chip"><span data-i18n="visits">總造訪次數</span><b id="visits">--------</b></span>
+    <button id="btn-lang" class="lang-btn" data-i18n-title="langTitle"
+            title="切換語言 / Switch language" aria-label="切換語言 / Switch language">
+      <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 2a10 10 0 1 0 0 20 10 10 0 0 0 0-20zm6.9 6h-2.95a15.6 15.6 0 0 0-1.38-3.56A8.03 8.03 0 0 1 18.9 8zM12 4.04c.83 1.2 1.48 2.53 1.91 3.96h-3.82c.43-1.43 1.08-2.76 1.91-3.96zM4.26 14a7.82 7.82 0 0 1 0-4h3.38a16.5 16.5 0 0 0 0 4H4.26zm.84 2h2.95c.32 1.25.78 2.45 1.38 3.56A7.99 7.99 0 0 1 5.1 16zm2.95-8H5.1a7.99 7.99 0 0 1 4.33-3.56A15.6 15.6 0 0 0 8.05 8zM12 19.96c-.83-1.2-1.48-2.53-1.91-3.96h3.82c-.43 1.43-1.08 2.76-1.91 3.96zM14.34 14H9.66a14.7 14.7 0 0 1 0-4h4.68a14.7 14.7 0 0 1 0 4zm.25 5.56c.6-1.11 1.06-2.31 1.38-3.56h2.95a8.03 8.03 0 0 1-4.33 3.56zM16.36 14a16.5 16.5 0 0 0 0-4h3.38a7.82 7.82 0 0 1 0 4h-3.38z"/></svg>
+      <span id="lang-code">TW</span>
+    </button>
   </nav>
 </header>
 
@@ -56,12 +65,12 @@
   <div id="az-popup" hidden>
     <div id="az-popup-inner">
       <div id="az-popup-coords"></div>
-      <label>方位角（0–360°）
+      <label><span data-i18n="bearingPrompt">方位角（0–360°）</span>
         <input type="number" id="az-popup-input" step="0.1" min="0" max="360" placeholder="0–360">
       </label>
       <div class="az-popup-actions">
-        <button id="az-popup-confirm" class="btn-primary">確認</button>
-        <button id="az-popup-cancel"  class="btn-secondary">取消</button>
+        <button id="az-popup-confirm" class="btn-primary" data-i18n="ok">確認</button>
+        <button id="az-popup-cancel"  class="btn-secondary" data-i18n="cancel">取消</button>
       </div>
     </div>
   </div>
@@ -77,35 +86,35 @@
   <div class="section settings">
     <div class="algo-row">
       <div class="setting-col" id="north-col">
-        <div class="section-title">北向</div>
+        <div class="section-title" data-i18n="north">北向</div>
         <div class="north-line">
           <div class="radio-group">
-            <button id="btn-north-true"     class="radio-btn active">真北</button>
-            <button id="btn-north-magnetic" class="radio-btn">磁北</button>
+            <button id="btn-north-true"     class="radio-btn active" data-i18n="trueNorth">真北</button>
+            <button id="btn-north-magnetic" class="radio-btn" data-i18n="magNorth">磁北</button>
           </div>
           <div id="date-label" class="date-row" hidden>
-            <span>日期</span>
+            <span data-i18n="date">日期</span>
             <input type="date" id="date-input">
             <span id="declination-display" class="inline-note" hidden></span>
           </div>
         </div>
       </div>
       <div class="setting-col">
-        <div class="section-title">座標輸入順序</div>
+        <div class="section-title" data-i18n="coordOrder">座標輸入順序</div>
         <div class="radio-group">
-          <button id="btn-coord-latlon" class="radio-btn active">緯,經</button>
-          <button id="btn-coord-lonlat" class="radio-btn">經,緯</button>
+          <button id="btn-coord-latlon" class="radio-btn active" data-i18n="latLon">緯,經</button>
+          <button id="btn-coord-lonlat" class="radio-btn" data-i18n="lonLat">經,緯</button>
         </div>
       </div>
       <div class="setting-col">
-        <div class="section-title">交會算法</div>
+        <div class="section-title" data-i18n="lineAlgo">交會算法</div>
         <div class="radio-group">
-          <button id="btn-line-planar"   class="radio-btn active">平面</button>
+          <button id="btn-line-planar"   class="radio-btn active" data-i18n="planar">平面</button>
           <button id="btn-line-geodesic" class="radio-btn">Geodesic</button>
         </div>
       </div>
       <div class="setting-col">
-        <div class="section-title">估算器</div>
+        <div class="section-title" data-i18n="estimator">估算器</div>
         <div class="radio-group">
           <button id="btn-est-centroid" class="radio-btn active">Centroid</button>
           <button id="btn-est-mle"      class="radio-btn">MLE</button>
@@ -118,16 +127,16 @@
   <div class="section settings">
     <div class="algo-row">
       <div class="setting-col">
-        <div class="section-title">多組別模式</div>
+        <div class="section-title" data-i18n="multiGroup">多組別模式</div>
         <button id="sw-multi-group" class="switch" role="switch" aria-checked="false"
-                aria-label="多組別模式">
+                data-i18n-title="multiGroup" aria-label="多組別模式">
           <span class="switch-thumb"></span>
         </button>
       </div>
       <div class="setting-col">
-        <div class="section-title">深色模式</div>
+        <div class="section-title" data-i18n="darkMode">深色模式</div>
         <button id="sw-dark" class="switch" role="switch" aria-checked="false"
-                aria-label="深色模式">
+                data-i18n-title="darkMode" aria-label="深色模式">
           <span class="switch-thumb"></span>
         </button>
       </div>
@@ -138,28 +147,28 @@
   <!-- ③ 觀測點 -->
   <div class="section">
     <div class="section-head">
-      <div class="section-title">觀測點</div>
-      <button id="btn-copy-shot" class="btn-result-action">📸 截圖所有組別</button>
+      <div class="section-title" data-i18n="stations">觀測點</div>
+      <button id="btn-copy-shot" class="btn-result-action" data-i18n="snapshotAll">📸 截圖所有組別</button>
     </div>
     <div id="group-list"></div>
-    <button id="btn-add-group" class="btn-action">＋ 新增一組</button>
+    <button id="btn-add-group" class="btn-action" data-i18n="addGroup">＋ 新增一組</button>
     <div id="manual-form" hidden>
-      <label>座標
-        <input type="text" id="input-latlon" placeholder="例：24.0, 120.5">
+      <label><span data-i18n="coordLabel">座標</span>
+        <input type="text" id="input-latlon" data-i18n-placeholder="egLatLon" placeholder="例：24.0, 120.5">
       </label>
-      <label>方位角°
+      <label><span data-i18n="bearingLabel">方位角°</span>
         <input type="number" id="input-az" step="0.1" min="0" max="360" placeholder="0–360">
       </label>
       <div class="form-actions">
-        <button id="btn-manual-confirm" class="btn-primary">確認</button>
-        <button id="btn-manual-cancel"  class="btn-secondary">取消</button>
+        <button id="btn-manual-confirm" class="btn-primary" data-i18n="ok">確認</button>
+        <button id="btn-manual-cancel"  class="btn-secondary" data-i18n="cancel">取消</button>
       </div>
     </div>
   </div>
 
   <!-- ④ 結果 -->
   <div class="section" id="results">
-    <div class="section-title">結果</div>
+    <div class="section-title" data-i18n="result">結果</div>
     <div id="result-list"></div>
   </div>
 
@@ -167,14 +176,14 @@
   <div class="section" id="help-section">
     <button id="help-toggle" class="link-btn">❓ 使用說明 ▶</button>
     <dl id="help-body" hidden>
-      <dt>真北 / 磁北</dt>
-      <dd>方位角基準。真北＝地圖北；磁北＝羅盤北。選磁北時需輸入日期，系統自動換算磁偏角，旁邊顯示當前偏差值。</dd>
-      <dt>緯,經 / 經,緯</dt>
-      <dd>座標輸入順序。台灣常用「緯度, 經度」（如 24.0, 120.5）；部分 GPS 設備輸出「經度, 緯度」。</dd>
-      <dt>平面 / Geodesic</dt>
-      <dd>平面法：緯經視為 XY，速度快，＜100 km 誤差小。Geodesic：球面大圓交會，長距離更準確。</dd>
-      <dt>Centroid / MLE</dt>
-      <dd>Centroid：所有交點平均，計算簡單但易受離群值影響。MLE（最大概似估計）：對方位誤差加權，精度較高。</dd>
+      <dt data-i18n="helpNorthT">真北 / 磁北</dt>
+      <dd data-i18n="helpNorthD">方位角基準。真北＝地圖北；磁北＝羅盤北。選磁北時需輸入日期，系統自動換算磁偏角，旁邊顯示當前偏差值。</dd>
+      <dt data-i18n="helpOrderT">緯,經 / 經,緯</dt>
+      <dd data-i18n="helpOrderD">座標輸入順序。台灣常用「緯度, 經度」（如 24.0, 120.5）；部分 GPS 設備輸出「經度, 緯度」。</dd>
+      <dt data-i18n="helpAlgoT">平面 / Geodesic</dt>
+      <dd data-i18n="helpAlgoD">平面法：緯經視為 XY，速度快，＜100 km 誤差小。Geodesic：球面大圓交會，長距離更準確。</dd>
+      <dt data-i18n="helpEstT">Centroid / MLE</dt>
+      <dd data-i18n="helpEstD">Centroid：所有交點平均，計算簡單但易受離群值影響。MLE（最大概似估計）：對方位誤差加權，精度較高。</dd>
     </dl>
   </div>
 
@@ -190,7 +199,7 @@
     <div id="confirm-popup-msg"></div>
     <div class="az-popup-actions">
       <button id="confirm-popup-ok"     class="btn-primary">確定清空</button>
-      <button id="confirm-popup-cancel" class="btn-secondary">取消</button>
+      <button id="confirm-popup-cancel" class="btn-secondary" data-i18n="cancel">取消</button>
     </div>
   </div>
 </div>

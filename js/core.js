@@ -3,6 +3,18 @@
 'use strict';
 
 /**
+ * Failures carry a message key and the station ids rather than prose, so the
+ * core stays free of any one language; the UI turns them into text.
+ */
+function calcError(key, a, b) {
+  const err = new Error(key);
+  err.key = key;
+  err.a = a;
+  err.b = b;
+  return err;
+}
+
+/**
  * Convert degrees to radians.
  */
 function toRad(deg) {
@@ -45,14 +57,14 @@ function planarIntersect(s1, s2) {
 
   const denom = dx1 * (-dy2) - (-dx2) * dy1;
   if (Math.abs(denom) < 1e-12) {
-    throw new Error(`觀測點 #${s1.id} 與 #${s2.id} 的方位線近乎平行，無法定位`);
+    throw calcError('errParallel', s1.id, s2.id);
   }
 
   const t = (dlon * (-dy2) - (-dx2) * dlat) / denom;
   const u = (dx1 * dlat - dlon * dy1) / denom;
 
   if (t < 0 || u < 0) {
-    throw new Error(`觀測點 #${s1.id} 與 #${s2.id} 的方位線無有效交會，請檢查角度`);
+    throw calcError('errNoIntersection', s1.id, s2.id);
   }
 
   return {
@@ -120,7 +132,7 @@ function geodesicIntersect(s1, s2) {
     }
   }
 
-  throw new Error(`觀測點 #${s1.id} 與 #${s2.id} 的方位線無有效交會，請檢查角度`);
+  throw calcError('errNoIntersection', s1.id, s2.id);
 }
 
 /**
@@ -206,7 +218,7 @@ function mleEstimate(stations, initial) {
  */
 function calculateTarget(stations, options) {
   if (stations.length < 2) {
-    throw new Error('至少需要 2 個觀測點');
+    throw calcError('errNeedTwo');
   }
 
   const lineLength = computeLineLength(stations);
@@ -216,7 +228,7 @@ function calculateTarget(stations, options) {
     for (let j = i + 1; j < stations.length; j++) {
       const angle = acuteAngleBetween(stations[i].azimuth, stations[j].azimuth);
       if (angle < 0.5) {
-        throw new Error(`觀測點 #${stations[i].id} 與 #${stations[j].id} 的方位線近乎平行，無法定位`);
+        throw calcError('errParallel', stations[i].id, stations[j].id);
       }
     }
   }

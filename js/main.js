@@ -41,6 +41,10 @@ const THEME_KEY = 'triangulation.theme';
 let darkMode = null;  // null | true | false
 const darkQuery = matchMedia('(prefers-color-scheme: dark)');
 
+// Language is a standing preference like the theme, and it also decides how
+// far the map may roam: tw stays over Taiwan, en is worldwide.
+const LANG_KEY = 'triangulation.lang';
+
 function todayISO() {
   return new Date().toISOString().slice(0, 10);
 }
@@ -93,6 +97,24 @@ function loadTheme() {
 
 // Until the switch is touched the app tracks the system setting live.
 darkQuery.addEventListener('change', () => { if (darkMode === null) applyTheme(); });
+
+// ── Language ───────────────────────────────────────────────────────────────
+function loadLang() {
+  let v = null;
+  try { v = localStorage.getItem(LANG_KEY); } catch (e) { v = null; }
+  setLang(v === 'en' ? 'en' : 'tw');
+}
+
+function applyLang() {
+  applyStaticStrings();
+  langCodeEl.textContent = currentLang().toUpperCase();
+  document.getElementById('help-toggle').textContent = t(state.showHelp ? 'helpClose' : 'helpOpen');
+  setMapArea(currentLang() === 'tw' ? TW_BOUNDS : null);
+  updateNorthUI();       // the declination label carries a translated word
+  updateCoordUI();       // manual-form placeholder
+  renderGroupList();     // rows are built from strings
+  recalculate();         // popups, results and the out-of-area note
+}
 
 const num = (v) => (typeof v === 'number' && isFinite(v) ? v : null);
 
@@ -170,6 +192,8 @@ const btnEstMle        = document.getElementById('btn-est-mle');
 const btnEstCentroid   = document.getElementById('btn-est-centroid');
 const swMultiGroup     = document.getElementById('sw-multi-group');
 const swDark           = document.getElementById('sw-dark');
+const btnLangEl        = document.getElementById('btn-lang');
+const langCodeEl       = document.getElementById('lang-code');
 
 const azPopupEl        = document.getElementById('az-popup');
 const azPopupCoordsEl  = document.getElementById('az-popup-coords');
@@ -182,6 +206,11 @@ initMap('map');
 addFitControl(fitPoints);
 loadTheme();
 applyTheme();
+loadLang();
+applyStaticStrings();
+langCodeEl.textContent = currentLang().toUpperCase();
+document.getElementById('help-toggle').textContent = t('helpOpen');
+setMapArea(currentLang() === 'tw' ? TW_BOUNDS : null);
 const restored = loadState();  // before the UI reads state, so it shows what was saved
 dateInputEl.value = state.date;
 updateNorthUI();
@@ -237,7 +266,7 @@ function updateDeclinationDisplay() {
   // Ordered by how much correction it is rather than by sign, so the span
   // reads from the smallest adjustment to the largest: 屏東 -4.38° 到 台北 -5.06°.
   const [from, to] = Math.abs(min) <= Math.abs(max) ? [min, max] : [max, min];
-  declEl.textContent = '偏角 ' +
+  declEl.textContent = t('decl') + ' ' +
     (max - min >= 0.05 ? `${formatDec(from)}～${formatDec(to)}` : formatDec(from));
   declEl.className = 'inline-note' +
     (Math.max(Math.abs(min), Math.abs(max)) > 1 ? ' highlight' : '');
@@ -272,7 +301,7 @@ function updateCoordUI() {
   // Update manual form placeholder
   const inputLatLon = document.getElementById('input-latlon');
   if (inputLatLon) {
-    inputLatLon.placeholder = isLatLon ? '例：24.0, 120.5' : '例：120.5, 24.0';
+    inputLatLon.placeholder = t(isLatLon ? 'egLatLon' : 'egLonLat');
   }
 }
 
@@ -382,9 +411,9 @@ resultListEl.addEventListener('click', async e => {
 
   if (act.dataset.act === 'copy') {
     if (await copyText(formatLatLon(r.target.lat, r.target.lon))) {
-      flashButton(act, '✓ 已複製', '📋 複製座標');
+      flashButton(act, t('copied'), t('copyCoord'));
     } else {
-      showError('無法複製，請手動選取座標');
+      showError(t('errCopy'));
     }
     return;
   }
@@ -395,8 +424,8 @@ resultListEl.addEventListener('click', async e => {
     if (navigator.share && matchMedia('(pointer: coarse)').matches) {
       try {
         await navigator.share({
-          title: `三角定位結果 ${groupLabel(group)}`,
-          text: `${groupLabel(group)} 目標座標 ${formatLatLon(r.target.lat, r.target.lon)}`,
+          title: t('shareTitle', { g: groupLabel(group) }),
+          text: t('shareText', { g: groupLabel(group), c: formatLatLon(r.target.lat, r.target.lon) }),
           url,
         });
         return;
@@ -405,9 +434,9 @@ resultListEl.addEventListener('click', async e => {
       }
     }
     if (await copyText(url)) {
-      flashButton(act, '✓ 已複製鏈接', '🔗 位置分享');
+      flashButton(act, t('copiedLink'), t('share'));
     } else {
-      showError('無法複製鏈接，請手動選取座標後自行分享');
+      showError(t('errCopyLink'));
     }
     return;
   }
@@ -514,7 +543,7 @@ async function buildSnapshotCanvas(groups) {
 
     ctx.fillStyle = snap.dim;
     ctx.font = `12px ${SNAP_FONT}`;
-    ctx.fillText('目標座標', pad, y + 5);
+    ctx.fillText(t('target'), pad, y + 5);
     if (result && result.target) {
       ctx.fillStyle = snap.fg;
       ctx.font = `bold 17px ${SNAP_FONT}`;
@@ -523,18 +552,18 @@ async function buildSnapshotCanvas(groups) {
       const warn = minA.value < 30;
       ctx.fillStyle = warn ? snap.warn : snap.dim;
       ctx.font = `11px ${SNAP_FONT}`;
-      ctx.fillText(`最小銳角 ${minA.value.toFixed(1)}° (#${minA.stationPair[0]}–#${minA.stationPair[1]})` +
-        (warn ? ' ⚠ 夾角過小' : ''), pad + 72, y + 20);
+      ctx.fillText(`${t('minAngle')} ${minA.value.toFixed(1)}° (#${minA.stationPair[0]}–#${minA.stationPair[1]})` +
+        (warn ? t('angleWarn') : ''), pad + 72, y + 20);
     } else {
       ctx.fillStyle = snap.warn;
       ctx.font = `13px ${SNAP_FONT}`;
-      ctx.fillText(result && result.error ? result.error : '觀測點不足', pad + 72, y + 2);
+      ctx.fillText(result && result.error ? result.error : t('notEnough'), pad + 72, y + 2);
     }
     y += headH;
 
     ctx.fillStyle = snap.dim;
     ctx.font = `12px ${SNAP_FONT}`;
-    ctx.fillText(`觀測點（${state.coordOrder === 'lonlat' ? '經,緯' : '緯,經'}）`, pad, y);
+    ctx.fillText(t('snapStations', { order: t(state.coordOrder === 'lonlat' ? 'lonLat' : 'latLon') }), pad, y);
     y += 18;
 
     stations.forEach(s => {
@@ -558,7 +587,7 @@ async function buildSnapshotCanvas(groups) {
       }
       ctx.fillStyle = snap.fg;
       ctx.font = `13px ${SNAP_FONT}`;
-      ctx.fillText(`${formatLatLon(s.lat, s.lon)}　方位角 ${s.azimuth.toFixed(1)}°`, x, cy);
+      ctx.fillText(`${formatLatLon(s.lat, s.lon)}　${t('snapBearing')} ${s.azimuth.toFixed(1)}°`, x, cy);
       ctx.textBaseline = 'top';
       y += rowH;
     });
@@ -573,8 +602,8 @@ async function buildSnapshotCanvas(groups) {
   ctx.stroke();
   y += 8;
 
-  const north = state.northMode === 'magnetic' ? `磁北（${state.date}）` : '真北';
-  const algo = state.lineAlgorithm === 'geodesic' ? 'Geodesic' : '平面';
+  const north = state.northMode === 'magnetic' ? `${t('magNorth')}（${state.date}）` : t('trueNorth');
+  const algo = state.lineAlgorithm === 'geodesic' ? 'Geodesic' : t('planar');
   const est = state.estimator === 'mle' ? 'MLE' : 'Centroid';
   ctx.fillStyle = snap.dim;
   ctx.font = `11px ${SNAP_FONT}`;
@@ -601,7 +630,7 @@ function downloadBlob(blob, filename) {
 async function captureSnapshot(btn, build, filename) {
   const label = btn.textContent;
   btn.disabled = true;
-  btn.textContent = '產生中…';
+  btn.textContent = t('generating');
   // Handing ClipboardItem a promise keeps the write inside the user gesture,
   // which Safari requires; the same promise feeds the download fallback.
   const shot = build().then(c => new Promise(res => c.toBlob(res, 'image/png')));
@@ -616,18 +645,18 @@ async function captureSnapshot(btn, build, filename) {
   }
   try {
     const blob = await shot;
-    if (!blob) throw new Error('無法產生圖片');
+    if (!blob) throw new Error(t('errNoImage'));
     btn.disabled = false;
     if (copied) {
-      flashButton(btn, '✓ 已複製截圖', label);
+      flashButton(btn, t('copiedShot'), label);
     } else {
       downloadBlob(blob, filename);
-      flashButton(btn, '✓ 已下載圖片', label);
+      flashButton(btn, t('downloaded'), label);
     }
   } catch (e) {
     btn.disabled = false;
     btn.textContent = label;
-    showError('截圖失敗：' + e.message);
+    showError(t('errShot', { msg: e.message }));
   }
 }
 
@@ -640,7 +669,7 @@ document.getElementById('help-toggle').addEventListener('click', () => {
   state.showHelp = !state.showHelp;
   document.getElementById('help-body').hidden = !state.showHelp;
   document.getElementById('help-toggle').textContent =
-    state.showHelp ? '❓ 使用說明 ▼' : '❓ 使用說明 ▶';
+    t(state.showHelp ? 'helpClose' : 'helpOpen');
 });
 
 // ── Lat/lon parsing ────────────────────────────────────────────────────────
@@ -697,7 +726,7 @@ function stationColorOf(group, s) {
 }
 
 function groupLabel(group) {
-  return group.name || `組${state.groups.indexOf(group) + 1}`;
+  return group.name || t('groupN', { n: state.groups.indexOf(group) + 1 });
 }
 
 function findGroup(id) {
@@ -821,11 +850,11 @@ function setStationEnabled(groupId, stationId, enabled) {
 function stationRowHtml(group, s, coordHint) {
   return `
     <div class="station-row${s.enabled ? '' : ' off'}" data-station-id="${s.id}">
-      <input type="checkbox" class="station-toggle" title="取消勾選即從地圖與計算中排除"
+      <input type="checkbox" class="station-toggle" title="${t('toggleStationTitle')}"
              ${s.enabled ? 'checked' : ''}>
       <span class="station-badge" style="background:${stationColorOf(group, s)}"
-            title="在地圖上定位這一站">#${s.id}</span>
-      <input type="text" class="name-input" placeholder="名稱" title="名稱（選填）"
+            title="${t('badgeTitle')}">#${s.id}</span>
+      <input type="text" class="name-input" placeholder="${t('namePlaceholder')}" title="${t('nameTitle')}"
              value="${escapeHtml(s.name)}" data-role="name">
       <input type="text" class="latlon-input" value="${formatLatLon(s.lat, s.lon)}"
              placeholder="${coordHint}" data-role="latlon">
@@ -840,12 +869,12 @@ function stationRowHtml(group, s, coordHint) {
 function groupSummary(group) {
   const r = results.get(group.id);
   const n = activeStationsIn(group).length;
-  if (r && r.target) return `${n} 點 · ${formatLatLon(r.target.lat, r.target.lon)}`;
-  return `${n} 點`;
+  if (r && r.target) return `${t('nPoints', { n })} · ${formatLatLon(r.target.lat, r.target.lon)}`;
+  return t('nPoints', { n });
 }
 
 function renderGroupList() {
-  const coordHint = state.coordOrder === 'lonlat' ? '經,緯' : '緯,經';
+  const coordHint = t(state.coordOrder === 'lonlat' ? 'lonLat' : 'latLon');
   groupListEl.innerHTML = '';
   document.getElementById('btn-add-group').hidden = !state.multiGroup;
   document.getElementById('btn-copy-shot').hidden = !state.multiGroup;
@@ -857,25 +886,25 @@ function renderGroupList() {
     card.dataset.groupId = group.id;
     card.innerHTML = `
       <div class="group-head">
-        <input type="checkbox" class="group-toggle" title="取消勾選即從地圖與計算中排除整組"
+        <button class="group-collapse" data-act="collapse"
+                title="${t(group.collapsed ? 'expand' : 'collapse')}">${group.collapsed ? '▶' : '▼'}</button>
+        <input type="checkbox" class="group-toggle" title="${t('toggleGroupTitle')}"
                ${group.enabled ? 'checked' : ''}>
         <span class="group-swatch" style="background:${groupColor(group)}"></span>
-        <input type="text" class="group-name" placeholder="組別名稱"
+        <input type="text" class="group-name" placeholder="${t('groupNamePlaceholder')}"
                value="${escapeHtml(group.name)}">
         <span class="group-summary">${escapeHtml(groupSummary(group))}</span>
-        <button class="group-collapse" data-act="collapse"
-                title="${group.collapsed ? '展開' : '收合'}">${group.collapsed ? '▶' : '▼'}</button>
-        <button class="btn-delete" data-act="del-group" title="刪除整組">✕</button>
+        <button class="btn-delete" data-act="del-group" title="${t('delGroupTitle')}">✕</button>
       </div>
       <div class="group-body">
         ${group.stations.map(s => stationRowHtml(group, s, coordHint)).join('')}
         <div class="group-actions">
-          <button class="btn-action" data-act="locate">📍 定位</button>
-          <button class="btn-action" data-act="pick">＋ 地圖點選</button>
-          <button class="btn-action" data-act="manual">＋ 手動新增</button>
+          <button class="btn-action" data-act="locate">${t('locate')}</button>
+          <button class="btn-action" data-act="pick">${t('pick')}</button>
+          <button class="btn-action" data-act="manual">${t('manual')}</button>
           <button class="btn-action danger" data-act="del-station"
-                  title="刪除選取的觀測點" disabled>刪除</button>
-          <button class="btn-action danger" data-act="clear">清空</button>
+                  title="${t('delTitle')}" disabled>${t('del')}</button>
+          <button class="btn-action danger" data-act="clear">${t('clear')}</button>
         </div>
       </div>`;
     groupListEl.appendChild(card);
@@ -948,6 +977,14 @@ groupListEl.addEventListener('focusin', e => {
 });
 
 document.getElementById('btn-add-group').addEventListener('click', () => addGroup());
+
+// Registered here, not up in the Language section: everything above the DOM
+// refs block runs before those consts exist.
+btnLangEl.addEventListener('click', () => {
+  setLang(currentLang() === 'tw' ? 'en' : 'tw');
+  try { localStorage.setItem(LANG_KEY, currentLang()); } catch (e) { /* not fatal */ }
+  applyLang();
+});
 
 swDark.addEventListener('click', () => {
   darkMode = !isDark();  // first touch turns the system default into a choice
@@ -1046,12 +1083,12 @@ function confirmManual() {
   const parsed = parseLatLon(latlonStr);
 
   if (!parsed) {
-    const ex = state.coordOrder === 'lonlat' ? '120.5, 24.0' : '24.0, 120.5';
-    showError(`請輸入有效座標，例：${ex}`);
+    const ex = t(state.coordOrder === 'lonlat' ? 'egLonLat' : 'egLatLon');
+    showError(t('errBadCoord', { eg: ex }));
     return;
   }
   if (isNaN(az) || az < 0 || az > 360) {
-    showError('請輸入有效的方位角（0–360°）');
+    showError(t('errBadBearing'));
     return;
   }
 
@@ -1077,13 +1114,13 @@ function openAzPopup(groupId, lat, lon) {
 function locateInto(groupId) {
   const btn = groupListEl.querySelector(`[data-group-id="${groupId}"] [data-act="locate"]`);
   if (!navigator.geolocation) {
-    showError('此瀏覽器不支援定位功能');
+    showError(t('errNoGeo'));
     return;
   }
   hideError();
   btn.disabled = true;
-  btn.textContent = '定位中…';
-  const restore = () => { btn.disabled = false; btn.textContent = '📍 定位'; };
+  btn.textContent = t('locating');
+  const restore = () => { btn.disabled = false; btn.textContent = t('locate'); };
   navigator.geolocation.getCurrentPosition(
     pos => {
       restore();
@@ -1094,11 +1131,11 @@ function locateInto(groupId) {
     err => {
       restore();
       const msgs = {
-        1: '定位權限被拒絕，請在瀏覽器設定中允許存取位置',
-        2: '無法取得位置訊號，請確認 GPS 已開啟',
-        3: '定位逾時，請再試一次',
+        1: t('errGeoDenied'),
+        2: t('errGeoUnavailable'),
+        3: t('errGeoTimeout'),
       };
-      showError(msgs[err.code] || ('定位失敗：' + err.message));
+      showError(msgs[err.code] || t('errGeoOther', { msg: err.message }));
     },
     { enableHighAccuracy: true, timeout: 15000, maximumAge: 0 }
   );
@@ -1149,7 +1186,7 @@ function askConfirm(msg, okLabel, action) {
 function confirmClearGroup(groupId) {
   const g = findGroup(groupId);
   if (!g || !g.stations.length) return;
-  askConfirm(`確定要清空「${groupLabel(g)}」的 ${g.stations.length} 個觀測點嗎？`, '確定清空', () => {
+  askConfirm(t('confirmClear', { g: groupLabel(g), n: g.stations.length }), t('confirmClearOk'), () => {
     g.stations = [];
     g.nextStationId = 1;
     renderGroupList();
@@ -1162,8 +1199,8 @@ function confirmDeleteGroup(groupId) {
   const g = findGroup(groupId);
   if (!g) return;
   if (!g.stations.length) { deleteGroup(groupId); return; }
-  askConfirm(`確定要刪除「${groupLabel(g)}」整組（含 ${g.stations.length} 個觀測點）嗎？`,
-    '確定刪除', () => deleteGroup(groupId));
+  askConfirm(t('confirmDelGroup', { g: groupLabel(g), n: g.stations.length }),
+    t('confirmDelOk'), () => deleteGroup(groupId));
 }
 
 function closeConfirm() {
@@ -1203,13 +1240,13 @@ function solveGroup(group) {
     try {
       stations = applyMagneticCorrection(active, state.date || todayISO());
     } catch (e) {
-      return { error: '磁偏角計算失敗：' + e.message, stations, lineLength: 0 };
+      return { error: t('errDecl', { msg: e.message }), stations, lineLength: 0 };
     }
   }
 
   const lineLength = computeLineLength(stations);
   if (active.length < 2) {
-    return { error: '至少需要 2 個觀測點', stations, lineLength };
+    return { error: t('errNeedTwo'), stations, lineLength };
   }
 
   try {
@@ -1219,7 +1256,8 @@ function solveGroup(group) {
     });
     return Object.assign(result, { stations, lineLength });
   } catch (e) {
-    return { error: e.message, stations, lineLength };
+    // core.js reports a message key plus the station ids, never prose.
+    return { error: e.key ? t(e.key, { a: e.a, b: e.b }) : e.message, stations, lineLength };
   }
 }
 
@@ -1235,13 +1273,13 @@ function drawGroups(groups) {
       // In magnetic mode show this point's own declination — it differs from
       // the next observer's, and the panel can only show one figure or a span.
       const azLine = state.northMode === 'magnetic'
-        ? `<br>方位角：${r.stations[idx].azimuth.toFixed(1)}°（真北）` +
-          `<br>磁北 ${s.azimuth.toFixed(1)}°，偏角 ` +
-          formatDec(geoMag(s.lat, s.lon, 0, surveyDate()).dec)
-        : `<br>方位角：${r.stations[idx].azimuth.toFixed(1)}°`;
+        ? `<br>${t('popupBearing')}：${r.stations[idx].azimuth.toFixed(1)}°${t('popupTrueSuffix')}` +
+          '<br>' + t('popupMagLine', { mag: s.azimuth.toFixed(1),
+            dec: formatDec(geoMag(s.lat, s.lon, 0, surveyDate()).dec) })
+        : `<br>${t('popupBearing')}：${r.stations[idx].azimuth.toFixed(1)}°`;
       const info = `<b>${escapeHtml(groupLabel(group))} #${s.id}` +
         `${nameHtml ? ' ' + nameHtml : ''}</b>` +
-        `<br>座標：${formatLatLon(s.lat, s.lon)}` + azLine;
+        `<br>${t('popupCoord')}：${formatLatLon(s.lat, s.lon)}` + azLine;
       const key = stationKey(group.id, s.id);
       drawStation(s.lat, s.lon, `#${s.id}`, color, key, info, onMarkerSelect, nameHtml);
       drawBearingLine(s.lat, s.lon, r.stations[idx].azimuth, r.lineLength, color, key, info, onMarkerSelect);
@@ -1292,7 +1330,7 @@ function renderResults() {
   const head = (g) => state.multiGroup
     ? `<span class="group-swatch" style="background:${groupColor(g)}"></span>
        <span class="result-label">${escapeHtml(groupLabel(g))}</span>`
-    : '<span class="result-label">目標座標</span>';
+    : `<span class="result-label">${t('target')}</span>`;
 
   groups.forEach(group => {
     const r = results.get(group.id);
@@ -1312,17 +1350,22 @@ function renderResults() {
 
     const minA = r.minAcuteAngle;
     const warn = minA.value < 30;
+    // The coordinate is still given; only the map declines to follow it there.
+    const outside = !inMapArea(r.target.lat, r.target.lon)
+      ? `<div class="result-sub"><span class="result-value warn">${t('outsideArea')}</span></div>`
+      : '';
     block.innerHTML = `
       <div class="result-row">
         ${head(group)}
         <span class="result-value">${formatLatLon(r.target.lat, r.target.lon)}</span>
       </div>
+      ${outside}
       <div class="result-sub">
-        <span class="result-label">最小銳角</span>
+        <span class="result-label">${t('minAngle')}</span>
         <span class="result-value${warn ? ' warn' : ''}">
-          ${minA.value.toFixed(1)}° (#${minA.stationPair[0]}–#${minA.stationPair[1]})${warn ? ' ⚠ 夾角過小' : ''}
+          ${minA.value.toFixed(1)}° (#${minA.stationPair[0]}–#${minA.stationPair[1]})${warn ? t('angleWarn') : ''}
         </span>
-        <button class="link-btn" data-act="angles">${group.showAngles ? '▲ 收合夾角' : '▼ 全部夾角'}</button>
+        <button class="link-btn" data-act="angles">${t(group.showAngles ? 'hideAngles' : 'allAngles')}</button>
       </div>
       <div class="all-angles"${group.showAngles ? '' : ' hidden'}>
         <table><tbody>${r.allPairAngles
@@ -1330,9 +1373,9 @@ function renderResults() {
           .join('')}</tbody></table>
       </div>
       <div class="result-actions-row">
-        <button class="btn-result-action" data-act="copy">📋 複製座標</button>
-        <button class="btn-result-action" data-act="share">🔗 位置分享</button>
-        <button class="btn-result-action" data-act="shot">📸 複製截圖</button>
+        <button class="btn-result-action" data-act="copy">${t('copyCoord')}</button>
+        <button class="btn-result-action" data-act="share">${t('share')}</button>
+        <button class="btn-result-action" data-act="shot">${t('snapshot')}</button>
       </div>`;
     resultListEl.appendChild(block);
   });
