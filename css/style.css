@@ -641,14 +641,9 @@ html[lang="en"] .title-desc { margin-left: .28em; }
   min-width: 0;
 }
 
-/* Saved-target controls, stacked under the layer switcher. */
-.pin-control svg { width: 18px; height: 18px; fill: var(--md-on-surface); display: block; margin: 3px auto; }
-.pin-popup-actions { margin-top: 6px; }
-.pin-popup-actions .pin-del { width: 100%; }
-
 .dist-label {
-  font-size: 13px;
-  color: var(--md-on-surface);
+  font-size: 11px;
+  color: var(--md-on-surface-var);
   font-variant-numeric: tabular-nums;
   white-space: nowrap;
   margin-left: 1px;

@@ -38,9 +38,6 @@ let _saveTimer = null;
 // key so it neither expires with the 24-hour window nor disappears when there
 // is no saved survey. null = follow the system setting.
 const THEME_KEY = 'triangulation.theme';
-// Saved targets are an accumulating record, not work-in-progress, so they get
-// their own key and never expire — a study can run for weeks.
-const PIN_KEY = 'triangulation.pins.v1';
 let darkMode = null;  // null | true | false
 const darkQuery = matchMedia('(prefers-color-scheme: dark)');
 
@@ -70,95 +67,6 @@ function saveState() {
       date: state.date,
     }));
   } catch (e) { /* storage unavailable — carry on without it */ }
-}
-
-let pins = [];        // { id, lat, lon, t, color, name }
-let nextPinId = 1;
-
-function savePins() {
-  try {
-    localStorage.setItem(PIN_KEY, JSON.stringify({ nextPinId, pins }));
-  } catch (e) { /* storage unavailable — carry on without it */ }
-}
-
-function loadPins() {
-  let saved = null;
-  try { saved = JSON.parse(localStorage.getItem(PIN_KEY)); } catch (e) { saved = null; }
-  if (!saved || !Array.isArray(saved.pins)) return;
-  pins = saved.pins.filter(p =>
-    num(p.lat) !== null && num(p.lon) !== null && num(p.t) !== null);
-  nextPinId = Number(saved.nextPinId) || pins.reduce((m, p) => Math.max(m, p.id + 1), 1);
-}
-
-// Six steps is about as many shades of one hue as stay apart on a busy
-// basemap. Ages are measured from now, and the last step is open-ended so a
-// long history settles at one pale shade instead of fading away entirely.
-const PIN_AGE_STEPS = [
-  { hours: 1,        fill: 1 },
-  { hours: 3,        fill: 0.85 },
-  { hours: 6,        fill: 0.70 },
-  { hours: 12,       fill: 0.55 },
-  { hours: 24,       fill: 0.45 },
-  { hours: Infinity, fill: 0.32 },
-];
-
-function pinFillOpacity(t) {
-  const ageH = (Date.now() - t) / 3600000;
-  return (PIN_AGE_STEPS.find(s => ageH < s.hours) || PIN_AGE_STEPS[PIN_AGE_STEPS.length - 1]).fill;
-}
-
-function formatPinTime(ms) {
-  const d = new Date(ms);
-  const p = (n) => String(n).padStart(2, '0');
-  return `${p(d.getMonth() + 1)}/${p(d.getDate())} ${p(d.getHours())}:${p(d.getMinutes())}`;
-}
-
-function drawPinLayer() {
-  drawPins(pins.map(p => ({
-    id: p.id,
-    lat: p.lat,
-    lon: p.lon,
-    color: p.color || '#d93025',
-    fillOpacity: pinFillOpacity(p.t),
-    popupHtml:
-      (p.name ? `<b>${escapeHtml(p.name)}</b><br>` : '') +
-      `${formatLatLon(p.lat, p.lon)}<br>${formatPinTime(p.t)}` +
-      `<div class="pin-popup-actions">` +
-      `<button class="pin-del btn-action danger">${t('del')}</button></div>`,
-  })), deletePin);
-}
-
-// One press saves every current target, so a round of 多組別模式 lands in a
-// single action rather than one press per group.
-function pinCurrentTargets() {
-  const now = Date.now();
-  let added = 0;
-  activeGroups().forEach(group => {
-    const r = results.get(group.id);
-    if (!r || !r.target) return;
-    pins.push({ id: nextPinId++, lat: r.target.lat, lon: r.target.lon,
-                t: now, color: groupColor(group), name: targetLabel(group) });
-    added++;
-  });
-  if (!added) { showError(t('errNothingToPin')); return; }
-  hideError();
-  savePins();
-  drawPinLayer();
-}
-
-function deletePin(id) {
-  pins = pins.filter(p => p.id !== id);
-  savePins();
-  drawPinLayer();
-}
-
-function clearPins() {
-  if (!pins.length) return;
-  askConfirm(t('confirmClearPins', { n: pins.length }), t('pinClearOk'), () => {
-    pins = [];
-    savePins();
-    drawPinLayer();
-  });
 }
 
 function forgetState() {
@@ -280,20 +188,14 @@ const azPopupCancel    = document.getElementById('az-popup-cancel');
 
 // ── Init ───────────────────────────────────────────────────────────────────
 initMap('map');
+addFitControl(fitPoints);
 loadTheme();
 applyTheme();
 loadLang();
-// The map controls bake their labels in at construction, so they have to wait
-// for the language to be settled — built any earlier they come out Chinese on
-// the /en/ page. Switching language reloads the page, so this runs again.
-addFitControl(fitPoints);
-addPinControl(pinCurrentTargets, clearPins);
 applyStaticStrings();
 langCodeEl.textContent = currentLang().toUpperCase();
 document.getElementById('help-toggle').textContent = t('helpOpen');
 setMapArea(currentLang() === 'tw' ? TW_BOUNDS : null);
-loadPins();
-drawPinLayer();
 const restored = loadState();  // before the UI reads state, so it shows what was saved
 dateInputEl.value = state.date;
 updateNorthUI();
@@ -993,14 +895,9 @@ function renderGroupList() {
     // The collapse button lives in the header, which single-group mode hides —
     // rendering it collapsed there would leave no way to open it again. The
     // flag itself is kept, so returning to 多組別模式 restores the state.
-    // Both flags belong to 多組別模式 only: single mode calculates the group
-    // whatever the enabled flag says, and it hides the header holding the two
-    // controls that set them — rendering either would leave no way back. The
-    // flags stay in the data, so switching the mode on restores what was set.
     const collapsed = state.multiGroup && group.collapsed;
-    const off = state.multiGroup && !group.enabled;
     card.className = 'group-card' + (state.multiGroup ? '' : ' single') +
-      (off ? ' off' : '') + (collapsed ? ' collapsed' : '');
+      (group.enabled ? '' : ' off') + (collapsed ? ' collapsed' : '');
     card.dataset.groupId = group.id;
     card.innerHTML = `
       <div class="group-head">

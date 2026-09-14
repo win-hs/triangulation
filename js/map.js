@@ -35,8 +35,6 @@ const BASE_LAYERS = {
 let map = null;
 let layerControl = null;
 let overlayGroup = null;  // holds all drawn features
-let pinGroup = null;      // saved targets — outlives clearOverlays()
-let pinClearEl = null;    // the 清空 button, hidden while there is nothing to clear
 let stationMarkers = new Map();  // stationId -> Leaflet marker
 let stationLines = new Map();    // stationId -> Leaflet polyline
 
@@ -48,9 +46,6 @@ function initMap(containerId) {
   });
 
   layerControl = L.control.layers(BASE_LAYERS, {}, { position: 'topright' }).addTo(map);
-  // Added before the overlay group so saved targets render beneath the live
-  // bearing lines rather than on top of them.
-  pinGroup = L.layerGroup().addTo(map);
   overlayGroup = L.layerGroup().addTo(map);
   return map;
 }
@@ -160,64 +155,6 @@ function drawTarget(lat, lon, labelHtml) {
     .bindPopup(`${labelHtml ? labelHtml + ' ' : ''}${t('popupTarget')}: ` +
       `${lat.toFixed(6)}, ${lon.toFixed(6)}`)
     .addTo(overlayGroup);
-}
-
-/**
- * Redraw the saved targets. Each pin carries its own colour and fill opacity
- * (the caller maps age onto them) plus ready-made popup HTML; the outline is
- * always solid so a faded pin is still findable on a busy basemap.
- * Clicking a pin opens its popup, where a 刪除 button calls onDelete(id) —
- * deleting on the tap itself would be far too easy to trigger by accident.
- */
-function drawPins(pins, onDelete) {
-  pinGroup.clearLayers();
-  pins.forEach(p => {
-    const m = L.circleMarker([p.lat, p.lon], {
-      radius: 6,
-      color: p.color,
-      weight: 2,
-      opacity: 1,
-      fillColor: p.color,
-      fillOpacity: p.fillOpacity,
-    }).addTo(pinGroup);
-    m.bindPopup(p.popupHtml);
-    m.on('popupopen', e => {
-      const btn = e.popup.getElement().querySelector('.pin-del');
-      if (btn) L.DomEvent.on(btn, 'click', () => { map.closePopup(); onDelete(p.id); });
-    });
-  });
-  if (pinClearEl) pinClearEl.style.display = pins.length ? '' : 'none';
-}
-
-/**
- * Two stacked buttons under the layer switcher: save the current target(s),
- * and clear every saved one.
- */
-function addPinControl(onPin, onClear) {
-  const Pins = L.Control.extend({
-    options: { position: 'topright' },
-    onAdd() {
-      const div = L.DomUtil.create('div', 'leaflet-bar leaflet-control');
-      const add = L.DomUtil.create('a', 'pin-control', div);
-      add.href = '#';
-      add.title = t('pinTitle');
-      add.setAttribute('role', 'button');
-      add.innerHTML = '<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 2a7 7 0 0 0-7 7c0 5.25 7 13 7 13s7-7.75 7-13a7 7 0 0 0-7-7zm0 9.5A2.5 2.5 0 1 1 12 6.5a2.5 2.5 0 0 1 0 5z"/></svg>';
-      pinClearEl = L.DomUtil.create('a', 'pin-control', div);
-      pinClearEl.href = '#';
-      pinClearEl.title = t('pinClearTitle');
-      pinClearEl.setAttribute('role', 'button');
-      pinClearEl.style.display = 'none';
-      pinClearEl.innerHTML = '<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M6 19a2 2 0 0 0 2 2h8a2 2 0 0 0 2-2V7H6v12zM19 4h-3.5l-1-1h-5l-1 1H5v2h14V4z"/></svg>';
-      L.DomEvent.disableClickPropagation(div);
-      L.DomEvent.on(add, 'click', L.DomEvent.stop);
-      L.DomEvent.on(add, 'click', onPin);
-      L.DomEvent.on(pinClearEl, 'click', L.DomEvent.stop);
-      L.DomEvent.on(pinClearEl, 'click', onClear);
-      return div;
-    },
-  });
-  new Pins().addTo(map);
 }
 
 /**
@@ -359,7 +296,7 @@ function captureMapCanvas() {
   // projection rather than by rasterising the SVG pane: that pane carries its
   // own transform and viewBox, which get applied a second time when it is
   // serialised into a standalone image, shifting every line off the markers.
-  const drawVector = (layer) => {
+  overlayGroup.eachLayer(layer => {
     const o = layer.options;
     if (o.opacity === 0) return;  // the invisible wide click-target line
     ctx.globalAlpha = o.opacity == null ? 1 : o.opacity;
@@ -384,9 +321,7 @@ function captureMapCanvas() {
       ctx.stroke();
     }
     ctx.globalAlpha = 1;
-  };
-  pinGroup.eachLayer(drawVector);      // saved targets sit beneath, as on screen
-  overlayGroup.eachLayer(drawVector);
+  });
 
   // Markers are divIcons (HTML), so redraw them rather than rasterising DOM.
   container.querySelectorAll('.station-marker, .target-marker').forEach(el => {
