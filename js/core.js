@@ -42,6 +42,17 @@ function acuteAngleBetween(az1, az2) {
  * and (lat2,lon2) at azimuth az2.
  * Returns {lat, lon} or throws if parallel or intersection on back-ray.
  */
+/**
+ * Great-circle distance between two points, in metres.
+ */
+function distanceMeters(lat1, lon1, lat2, lon2) {
+  const R = 6371008.8;  // IUGG mean Earth radius
+  const p1 = toRad(lat1), p2 = toRad(lat2);
+  const dp = toRad(lat2 - lat1), dl = toRad(lon2 - lon1);
+  const a = Math.sin(dp / 2) ** 2 + Math.cos(p1) * Math.cos(p2) * Math.sin(dl / 2) ** 2;
+  return 2 * R * Math.asin(Math.sqrt(a));
+}
+
 function planarIntersect(s1, s2) {
   // Direction vectors from azimuth (north = +y, east = +x)
   const dx1 = Math.sin(toRad(s1.azimuth));

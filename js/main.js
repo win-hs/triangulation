@@ -482,9 +482,11 @@ async function buildSnapshotCanvas(groups) {
   const headH = 46;       // group name + target line
   const W = Math.max(mapCanvas.width, 460);
 
-  const nameH = state.multiGroup ? 20 : 0;
+  // Single-group mode prints a name only when the user gave one, so the height
+  // has to be worked out per section rather than once for the whole panel.
+  const nameH = (sec) => targetLabel(sec.group) ? 20 : 0;
   const panelH = pad * 2 + 34 +
-    sections.reduce((h, sec) => h + nameH + headH + 18 + sec.stations.length * rowH + 10, 0);
+    sections.reduce((h, sec) => h + nameH(sec) + headH + 18 + sec.stations.length * rowH + 10, 0);
 
   const canvas = document.createElement('canvas');
   canvas.width = W;
@@ -512,17 +514,20 @@ async function buildSnapshotCanvas(groups) {
       y += 10;
     }
 
-    // A colour dot ties the group back to the map; the name itself stays dark
-    // so it does not read as one of the observation points. Single-group mode
-    // has no group to name.
-    if (state.multiGroup) {
-      ctx.beginPath();
-      ctx.arc(pad + 5, y + 8, 5, 0, Math.PI * 2);
-      ctx.fillStyle = color;
-      ctx.fill();
+    // The name stays dark so it does not read as one of the observation
+    // points. The colour dot keys it to the map, but single-group mode colours
+    // its points individually, so there the dot would key to nothing.
+    const label = targetLabel(group);
+    if (label) {
+      if (state.multiGroup) {
+        ctx.beginPath();
+        ctx.arc(pad + 5, y + 8, 5, 0, Math.PI * 2);
+        ctx.fillStyle = color;
+        ctx.fill();
+      }
       ctx.fillStyle = snap.fg;
       ctx.font = `bold 14px ${SNAP_FONT}`;
-      ctx.fillText(groupLabel(group), pad + 16, y);
+      ctx.fillText(label, state.multiGroup ? pad + 16 : pad, y);
       y += 20;
     }
 
@@ -572,7 +577,17 @@ async function buildSnapshotCanvas(groups) {
       }
       ctx.fillStyle = snap.fg;
       ctx.font = `13px ${SNAP_FONT}`;
-      ctx.fillText(`${formatLatLon(s.lat, s.lon)}　${t('snapBearing')} ${s.azimuth.toFixed(1)}°`, x, cy);
+      const line = `${formatLatLon(s.lat, s.lon)}　${t('snapBearing')} ${s.azimuth.toFixed(1)}°`;
+      ctx.fillText(line, x, cy);
+      const lineW = ctx.measureText(line).width;   // measured before the font shrinks
+      // The distance rides along in the shared image too, but stays dim: it is
+      // context, not one of the measured values.
+      if (result && result.target) {
+        ctx.fillStyle = snap.dim;
+        ctx.font = `12px ${SNAP_FONT}`;
+        ctx.fillText('　' + formatDistance(
+          distanceMeters(s.lat, s.lon, result.target.lat, result.target.lon)), x + lineW, cy);
+      }
       ctx.textBaseline = 'top';
       y += rowH;
     });
@@ -714,6 +729,16 @@ function groupLabel(group) {
   return group.name || t('groupN', { n: state.groups.indexOf(group) + 1 });
 }
 
+// Multi-group always needs a label to tell the cards apart; single-group mode
+// has nothing to distinguish, so it shows a name only when the user gave one.
+function targetLabel(group) {
+  return state.multiGroup ? groupLabel(group) : group.name;
+}
+
+function formatDistance(m) {
+  return m < 1000 ? `${Math.round(m)} m` : `${(m / 1000).toFixed(2)} km`;
+}
+
 function findGroup(id) {
   return state.groups.find(g => g.id === id);
 }
@@ -846,6 +871,7 @@ function stationRowHtml(group, s, coordHint) {
       <input type="number" class="az-input" step="0.1" min="0" max="360"
              value="${s.azimuth}" data-role="azimuth">
       <span class="az-label">°</span>
+      <span class="dist-label" title="${t('distTitle')}"></span>
     </div>`;
 }
 
@@ -866,17 +892,22 @@ function renderGroupList() {
 
   visibleGroups().forEach(group => {
     const card = document.createElement('div');
+    // The collapse button lives in the header, which single-group mode hides —
+    // rendering it collapsed there would leave no way to open it again. The
+    // flag itself is kept, so returning to 多組別模式 restores the state.
+    const collapsed = state.multiGroup && group.collapsed;
     card.className = 'group-card' + (state.multiGroup ? '' : ' single') +
-      (group.enabled ? '' : ' off') + (group.collapsed ? ' collapsed' : '');
+      (group.enabled ? '' : ' off') + (collapsed ? ' collapsed' : '');
     card.dataset.groupId = group.id;
     card.innerHTML = `
       <div class="group-head">
         <button class="group-collapse" data-act="collapse"
-                title="${t(group.collapsed ? 'expand' : 'collapse')}">${group.collapsed ? '▶' : '▼'}</button>
+                title="${t(collapsed ? 'expand' : 'collapse')}">${collapsed ? '▶' : '▼'}</button>
         <input type="checkbox" class="group-toggle" title="${t('toggleGroupTitle')}"
                ${group.enabled ? 'checked' : ''}>
         <span class="group-swatch" style="background:${groupColor(group)}"></span>
-        <input type="text" class="group-name" placeholder="${t('groupNamePlaceholder')}"
+        <input type="text" class="group-name"
+               placeholder="${t(state.multiGroup ? 'groupNamePlaceholder' : 'targetNamePlaceholder')}"
                value="${escapeHtml(group.name)}">
         <span class="group-summary">${escapeHtml(groupSummary(group))}</span>
         <button class="btn-delete" data-act="del-group" title="${t('delGroupTitle')}">✕</button>
@@ -896,7 +927,26 @@ function renderGroupList() {
   });
 
   applySelection();  // rows were rebuilt, so restore the highlight and 刪除 state
+  renderStationDistances();
   scheduleSave();
+}
+
+// Distance from each station to its group's target. Patched into the existing
+// rows like the summaries are, so typing in a field never loses focus. Shown
+// for excluded stations too — it is a geometric fact, not a calculation input,
+// and the greyed-out row already says the station is not contributing.
+function renderStationDistances() {
+  state.groups.forEach(group => {
+    const r = results.get(group.id);
+    group.stations.forEach(s => {
+      const el = groupListEl.querySelector(
+        `[data-group-id="${group.id}"] [data-station-id="${s.id}"] .dist-label`);
+      if (!el) return;
+      el.textContent = r && r.target
+        ? formatDistance(distanceMeters(s.lat, s.lon, r.target.lat, r.target.lon))
+        : '';
+    });
+  });
 }
 
 // One delegated listener for the whole group list — the cards are rebuilt on
@@ -1274,10 +1324,9 @@ function drawGroups(groups) {
       drawBearingLine(s.lat, s.lon, r.stations[idx].azimuth, r.lineLength, color, key, info, onMarkerSelect);
     });
     if (!r.target) return;
-    // In single-group mode there is nothing to tell apart, so the cross needs
-    // no caption.
-    drawTarget(r.target.lat, r.target.lon,
-      state.multiGroup ? escapeHtml(groupLabel(group)) : '');
+    // Unnamed single-group mode leaves the cross uncaptioned — there is
+    // nothing to tell it apart from.
+    drawTarget(r.target.lat, r.target.lon, escapeHtml(targetLabel(group)));
     r.pairIntersections.forEach(p => drawIntersection(p.lat, p.lon));
   });
 }
@@ -1293,6 +1342,7 @@ function recalculate() {
   fitToPoints(fitPoints());
   renderResults();
   renderGroupSummaries();
+  renderStationDistances();
   scheduleSave();
 }
 
@@ -1314,12 +1364,11 @@ function renderGroupSummaries() {
 function renderResults() {
   resultListEl.innerHTML = '';
   const groups = activeGroups().filter(g => activeStationsIn(g).length > 0);
-  // Single-group mode has no group to name, so the row reads like it did
-  // before groups existed.
+  // Unnamed single-group mode reads like it did before groups existed.
   const head = (g) => state.multiGroup
     ? `<span class="group-swatch" style="background:${groupColor(g)}"></span>
        <span class="result-label">${escapeHtml(groupLabel(g))}</span>`
-    : `<span class="result-label">${t('target')}</span>`;
+    : `<span class="result-label">${escapeHtml(g.name || t('target'))}</span>`;
 
   groups.forEach(group => {
     const r = results.get(group.id);

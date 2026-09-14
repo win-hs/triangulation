@@ -601,11 +601,16 @@ html[lang="en"] .title-desc { margin-left: .28em; }
 .group-card.off .group-name,
 .group-card.off .group-body { opacity: .42; }
 
-/* 多組別模式 off: the single group needs no header, and the card border would
-   only box in a list that has nothing to be told apart from. */
+/* 多組別模式 off: the card border would only box in a list that has nothing to
+   be told apart from, and the header keeps just the name field — with one group
+   there is nothing to collapse, switch off, colour-key or delete. */
 .group-card.single { border: none; padding: 0; }
-.group-card.single .group-head { display: none; }
-.group-card.single .group-body { margin-top: 0; }
+.group-card.single .group-collapse,
+.group-card.single .group-toggle,
+.group-card.single .group-swatch,
+.group-card.single .group-summary,
+.group-card.single .btn-delete { display: none; }
+.group-card.single input.group-name { margin-bottom: 2px; }
 
 /* One station per row: checkbox, badge, name, coordinates, azimuth, delete.
    Wraps only when the viewport cannot hold it (mobile). */
@@ -634,6 +639,14 @@ html[lang="en"] .title-desc { margin-left: .28em; }
   border-radius: 4px;
   font-size: 13px;
   min-width: 0;
+}
+
+.dist-label {
+  font-size: 11px;
+  color: var(--md-on-surface-var);
+  font-variant-numeric: tabular-nums;
+  white-space: nowrap;
+  margin-left: 1px;
 }
 
 /* Unchecked: excluded from map and calculation, so grey it out — but leave
