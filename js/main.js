@@ -99,7 +99,11 @@ function loadTheme() {
 darkQuery.addEventListener('change', () => { if (darkMode === null) applyTheme(); });
 
 // ── Language ───────────────────────────────────────────────────────────────
+// A page may declare its own language (the /en/ entry exists so link previews
+// are in English); that wins over the stored preference, because opening that
+// URL is a more explicit request than a choice made on an earlier visit.
 function loadLang() {
+  if (window.PAGE_LANG) { setLang(window.PAGE_LANG); return; }
   let v = null;
   try { v = localStorage.getItem(LANG_KEY); } catch (e) { v = null; }
   setLang(v === 'en' ? 'en' : 'tw');

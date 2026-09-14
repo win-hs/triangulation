@@ -11,8 +11,8 @@ const STRINGS = {
   tw: {
     // ── App shell ──
     docTitle: 'Triangulation：野生動物 VHF 定位工具',
-    appTitle: 'Triangulation：野生動物 VHF 定位工具',
-    appShort: 'Triangulation',
+    appName: 'Triangulation：',
+    appDesc: '野生動物 VHF 定位工具',
     metaDesc: 'Triangulation：野生動物 VHF 定位工具。輸入各觀測點的座標與方位角，自動交會計算目標位置，並在地圖上顯示方位線與交會點。支援真北／磁北、平面／Geodesic 交會、Centroid／MLE 估算。',
     backHome: '返回 Field-Box 首頁',
     report: '回報問題',
@@ -135,8 +135,8 @@ const STRINGS = {
 
   en: {
     docTitle: 'Triangulation: for wildlife VHF radio tracking',
-    appTitle: 'Triangulation: for wildlife VHF radio tracking',
-    appShort: 'Triangulation',
+    appName: 'Triangulation:',
+    appDesc: 'for wildlife VHF radio tracking',
     metaDesc: 'Triangulation: for wildlife VHF radio tracking. Enter each station’s coordinates and bearing; the bearings are intersected on a map to estimate the target position. True or magnetic north, planar or geodesic intersection, centroid or MLE estimator.',
     backHome: 'Back to Field-Box',
     report: 'Report an issue',

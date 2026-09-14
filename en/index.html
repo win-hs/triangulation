@@ -1,19 +1,23 @@
 <!DOCTYPE html>
-<html lang="zh-TW">
+<!-- English entry point. Exists only so link previews (LINE, Messenger, search)
+     read English metadata — crawlers never run the JS that switches language.
+     The body is the same markup as ../index.html and must be kept in step with
+     it; everything visible comes from data-i18n so only <head> really differs. -->
+<html lang="en">
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>Triangulation：野生動物 VHF 定位工具</title>
-  <meta name="description" content="Triangulation：野生動物 VHF 定位工具。輸入各觀測點的座標與方位角，自動交會計算目標位置，並在地圖上顯示方位線與交會點。支援真北／磁北、平面／Geodesic 交會、Centroid／MLE 估算。">
-  <link rel="canonical" href="https://win-hs.github.io/triangulation/">
+  <title>Triangulation: for wildlife VHF radio tracking</title>
+  <meta name="description" content="Triangulation: for wildlife VHF radio tracking. Enter each station&rsquo;s coordinates and bearing; the bearings are intersected on a map to estimate the target position. True or magnetic north, planar or geodesic intersection, centroid or MLE estimator.">
+  <link rel="canonical" href="https://win-hs.github.io/triangulation/en/">
   <link rel="alternate" hreflang="zh-Hant" href="https://win-hs.github.io/triangulation/">
   <link rel="alternate" hreflang="en" href="https://win-hs.github.io/triangulation/en/">
   <link rel="alternate" hreflang="x-default" href="https://win-hs.github.io/triangulation/">
-  <meta property="og:title" content="Triangulation：野生動物 VHF 定位工具">
-  <meta property="og:description" content="輸入各觀測點的座標與方位角，自動交會計算目標位置，並在地圖上顯示方位線與交會點。">
+  <meta property="og:title" content="Triangulation: for wildlife VHF radio tracking">
+  <meta property="og:description" content="Enter each station&rsquo;s coordinates and bearing; the bearings are intersected on a map to estimate the target position.">
   <meta property="og:type" content="website">
-  <meta property="og:url" content="https://win-hs.github.io/triangulation/">
-  <meta property="og:locale" content="zh_TW">
+  <meta property="og:url" content="https://win-hs.github.io/triangulation/en/">
+  <meta property="og:locale" content="en_US">
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
   <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Roboto:wght@400;500;700&family=Roboto+Mono:wght@400;500&family=Noto+Sans+TC:wght@400;500;700&display=swap">
@@ -26,18 +30,19 @@
   <script src="https://unpkg.com/@turf/turf@6.5.0/turf.min.js"></script>
 
   <!-- geomag.js (WMM2025 magnetic declination, self-hosted) -->
-  <script src="js/i18n.js"></script>
-  <script src="js/geomag.js"></script>
+  <script>window.PAGE_LANG = "en";</script>
+  <script src="../js/i18n.js"></script>
+  <script src="../js/geomag.js"></script>
 
-  <link rel="stylesheet" href="css/style.css">
+  <link rel="stylesheet" href="../css/style.css">
 </head>
 <body>
 
 <!-- ── Top app bar (full width, above map + panel) ─────────────────── -->
 <header class="app-bar">
   <div class="app-bar-brand">
-    <img class="app-bar-logo" src="logo.png" alt="">
-    <h1 class="app-bar-title"><span class="title-name" data-i18n="appName">Triangulation：</span><span class="title-desc" data-i18n="appDesc">野生動物 VHF 定位工具</span></h1>
+    <img class="app-bar-logo" src="../logo.png" alt="">
+    <h1 class="app-bar-title"><span class="title-name" data-i18n="appName">Triangulation:</span><span class="title-desc" data-i18n="appDesc">for wildlife VHF radio tracking</span></h1>
   </div>
   <nav class="app-bar-actions">
     <a class="md-btn" href="https://win-hs.github.io/portfolio/field-box/">
@@ -205,10 +210,10 @@
 </div>
 
 <!-- App scripts -->
-<script src="js/core.js"></script>
-<script src="js/magnetic.js"></script>
-<script src="js/map.js"></script>
-<script src="js/main.js"></script>
+<script src="../js/core.js"></script>
+<script src="../js/magnetic.js"></script>
+<script src="../js/map.js"></script>
+<script src="../js/main.js"></script>
 <script>
 (function () {
   fetch('https://abacus.jasoncameron.dev/hit/triangulation-awen-9/live-visits')

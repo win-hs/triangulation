@@ -141,6 +141,9 @@ body {
    so flip it to white. */
 :root[data-theme="dark"] .app-bar-logo { filter: invert(1); }
 
+/* One line on a desktop: the two spans flow as ordinary inline text, the
+   newline between them collapsing to a single space. The phone stacks them —
+   see the media query. */
 .app-bar-title {
   font-size: 20px;
   font-weight: 700;
@@ -150,11 +153,10 @@ body {
   overflow: hidden;
   text-overflow: ellipsis;
 }
-
-/* The descriptive name is the point of the title, but a phone only has room
-   for about 150px of it — show the bare product name there instead of an
-   ellipsis that cuts mid-word. */
-.title-short { display: none; }
+.title-name, .title-desc { font: inherit; color: inherit; }
+/* The fullwidth colon of the Chinese name already spaces itself; the English
+   colon does not, so only that one needs a gap. */
+html[lang="en"] .title-desc { margin-left: .28em; }
 
 .app-bar-actions { display: flex; align-items: center; gap: 4px; }
 
@@ -702,8 +704,11 @@ body {
 
 /* ── Action buttons ──────────────────────────────────────────────── */
 /* All four actions stay on one row, so they share the width evenly. */
+/* Wraps rather than overflows: the English labels are longer than the Chinese
+   ones and five of them do not fit a phone's width on one line. */
 #station-actions, .group-actions {
   display: flex;
+  flex-wrap: wrap;
   gap: 4px;
 }
 
@@ -1000,9 +1005,27 @@ body {
 /* ── Mobile: stack map above panel; the 360px side panel cannot fit ──── */
 @media (max-width: 768px) {
   .app-bar { height: 56px; padding: 0 8px 0 12px; gap: 8px; }
-  .app-bar-title { font-size: 15px; }
-  .title-full { display: none; }
-  .title-short { display: inline; }
+  /* Split onto two lines: a 375px bar cannot hold the whole name, and letting
+     it wrap on its own broke mid-phrase. */
+  .app-bar-title {
+    display: flex;
+    flex-direction: column;
+    justify-content: center;
+    min-width: 0;
+    white-space: normal;
+    overflow: visible;
+  }
+  .title-name { font-size: 14px; font-weight: 700; line-height: 1.2; white-space: nowrap; }
+  html[lang="en"] .title-desc { margin-left: 0; }   /* stacked, so no indent */
+  .title-desc {
+    font-size: 11px;
+    font-weight: 400;
+    line-height: 1.2;
+    color: var(--md-on-surface-var);
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+  }
   .app-bar-logo { width: 26px; height: 26px; }
   .app-bar-actions { gap: 0; }
   /* Icon-only actions: zero out the label but keep it for screen readers */
