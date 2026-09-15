@@ -10,6 +10,8 @@ const state = {
   groups: [],               // { id, name, enabled, collapsed, showAngles, nextStationId, stations[] }
   nextGroupId: 1,
   multiGroup: false,        // off = the pre-groups single-list behaviour
+  timeSeries: false,        // on = every fix is recorded on the map
+  tsInterval: 30,           // seconds of no change before a fix is committed (see TS_INTERVALS)
   northMode: 'true',        // 'true' | 'magnetic'
   coordOrder: 'latlon',     // 'latlon' | 'lonlat'
   lineAlgorithm: 'planar',  // 'planar' | 'geodesic'
@@ -38,6 +40,9 @@ let _saveTimer = null;
 // key so it neither expires with the 24-hour window nor disappears when there
 // is no saved survey. null = follow the system setting.
 const THEME_KEY = 'triangulation.theme';
+// Saved targets are an accumulating record, not work-in-progress, so they get
+// their own key and never expire — a study can run for weeks.
+const PIN_KEY = 'triangulation.pins.v1';
 let darkMode = null;  // null | true | false
 const darkQuery = matchMedia('(prefers-color-scheme: dark)');
 
@@ -60,6 +65,8 @@ function saveState() {
       groups: state.groups,
       nextGroupId: state.nextGroupId,
       multiGroup: state.multiGroup,
+      timeSeries: state.timeSeries,
+      tsInterval: state.tsInterval,
       northMode: state.northMode,
       coordOrder: state.coordOrder,
       lineAlgorithm: state.lineAlgorithm,
@@ -67,6 +74,289 @@ function saveState() {
       date: state.date,
     }));
   } catch (e) { /* storage unavailable — carry on without it */ }
+}
+
+const PIN_MAX = 20;   // oldest drops out once the map is full
+const PIN_RAMP = 6;   // how many of the newest carry the colour ramp
+
+let pins = [];        // { id, lat, lon, t, color, name }
+let pinSeq = 1;
+// Record ids have to stay unique across devices: two people's series get
+// merged when shared, and a colliding id would silently overwrite the other
+// person's record instead of adding to it.
+let deviceId = '';
+// groupId -> id of the record currently being written. Not persisted: a fresh
+// page load starts a new one.
+let recIds = new Map();
+let _pinSaveTimer = null;
+let _settleTimer = null;
+// A restored fix was already recorded in the session that made it. Without
+// this, every reload — including a language switch — would drop another point
+// on top of it, and a few reopenings would fill the whole history with copies
+// of the same position.
+let _suppressRecord = false;
+
+// A fix stays open while it is still being worked on, so nudging a bearing
+// moves the point instead of dropping another one beside it. Once nothing has
+// changed for tsInterval seconds the fix is committed and the next change
+// starts a new point — no need to press 清空 between rounds.
+function scheduleSettle() {
+  clearTimeout(_settleTimer);
+  _settleTimer = setTimeout(() => recIds.clear(), state.tsInterval * 1000);
+}
+
+function schedulePinSave() {
+  clearTimeout(_pinSaveTimer);
+  _pinSaveTimer = setTimeout(savePins, 300);
+}
+
+function savePins() {
+  try {
+    localStorage.setItem(PIN_KEY, JSON.stringify({ deviceId, pinSeq, pins }));
+  } catch (e) { /* storage unavailable — carry on without it */ }
+}
+
+function loadPins() {
+  let saved = null;
+  try { saved = JSON.parse(localStorage.getItem(PIN_KEY)); } catch (e) { saved = null; }
+  deviceId = (saved && saved.deviceId) || Math.random().toString(36).slice(2, 8);
+  pinSeq = (saved && Number(saved.pinSeq)) || 1;
+  pins = (saved && Array.isArray(saved.pins) ? saved.pins : []).filter(p =>
+    p && typeof p.id === 'string' &&
+    num(p.lat) !== null && num(p.lon) !== null && num(p.t) !== null);
+  if (pins.length > PIN_MAX) pins = pins.slice(-PIN_MAX);
+}
+
+// Recency is ranked, not clocked: the newest PIN_RAMP fixes carry the colour
+// ramp and everything older sits in one desaturated tone of the same hue.
+// Ranking keeps the steps apart no matter how the times happen to fall — with
+// age bands a whole afternoon's work could land in one band and show nothing.
+// Fading opacity alone washed out against the basemap, so the ramp drops
+// saturation instead: a blue series ends blue-grey rather than invisible.
+function hexToHsl(hex) {
+  const m = /^#?([0-9a-f]{2})([0-9a-f]{2})([0-9a-f]{2})$/i.exec(hex);
+  if (!m) return { h: 210, s: 0.5, l: 0.5 };
+  const [r, g, b] = m.slice(1).map(v => parseInt(v, 16) / 255);
+  const max = Math.max(r, g, b), min = Math.min(r, g, b), d = max - min;
+  const l = (max + min) / 2;
+  if (!d) return { h: 0, s: 0, l };
+  const s = d / (1 - Math.abs(2 * l - 1));
+  const h = max === r ? 60 * (((g - b) / d) % 6)
+          : max === g ? 60 * ((b - r) / d + 2)
+                      : 60 * ((r - g) / d + 4);
+  return { h: (h + 360) % 360, s, l };
+}
+
+function hslToHex(h, s, l) {
+  const c = (1 - Math.abs(2 * l - 1)) * s;
+  const x = c * (1 - Math.abs(((h / 60) % 2) - 1));
+  const m = l - c / 2;
+  const seg = [[c,x,0],[x,c,0],[0,c,x],[0,x,c],[x,0,c],[c,0,x]][Math.floor(h / 60) % 6];
+  return '#' + seg.map(v => Math.round((v + m) * 255).toString(16).padStart(2, '0')).join('');
+}
+
+// rank 0 = newest. Beyond the ramp everything shares one blue-grey, so a long
+// history reads as background without competing with the recent points.
+function pinStyle(baseHex, rank) {
+  const { h, s, l } = hexToHsl(baseHex);
+  if (rank >= PIN_RAMP) {
+    return { fill: hslToHex(h, 0.18, 0.74), stroke: hslToHex(h, 0.18, 0.56) };
+  }
+  const k = rank / (PIN_RAMP - 1);                 // 0 newest → 1 oldest coloured
+  const sat = s * (1 - 0.45 * k);
+  const lit = l + (0.64 - l) * k;
+  return { fill: hslToHex(h, sat, lit), stroke: hslToHex(h, sat, Math.max(0.2, lit - 0.16)) };
+}
+
+const pad2 = (n) => String(n).padStart(2, '0');
+
+function formatPinTime(ms) {
+  const d = new Date(ms);
+  return `${pad2(d.getMonth() + 1)}/${pad2(d.getDate())} ${pad2(d.getHours())}:${pad2(d.getMinutes())}`;
+}
+
+// The caption is the crowded one, so it drops the date unless the point is
+// from another day — most series run inside one, and a shorter caption is a
+// caption that survives the overlap pass.
+function formatPinClock(ms) {
+  const d = new Date(ms), now = new Date();
+  const hm = `${pad2(d.getHours())}:${pad2(d.getMinutes())}`;
+  const sameDay = d.getDate() === now.getDate() && d.getMonth() === now.getMonth()
+    && d.getFullYear() === now.getFullYear();
+  return sameDay ? hm : `${pad2(d.getMonth() + 1)}/${pad2(d.getDate())} ${hm}`;
+}
+
+function refreshPinControls() {
+  if (tsShareBtn) tsShareBtn.disabled = !pins.length;
+  setSweepEnabled(state.timeSeries, pins.length > 0);
+}
+
+function drawPinLayer() {
+  const last = pins.length - 1;
+  drawPins(pins.map((p, i) => ({
+    id: p.id,
+    lat: p.lat,
+    lon: p.lon,
+    // Ownership is its own visual channel: hue is already spoken for by which
+    // target this is, and lightness by how recent.
+    shared: pinDevice(p.id) !== deviceId,
+    baseColor: p.color || '#1a73e8',
+    name: p.name || '',
+    ...pinStyle(p.color || '#1a73e8', last - i),
+    label: formatPinClock(p.t),
+    popupHtml:
+      (p.name ? `<b>${escapeHtml(p.name)}</b><br>` : '') +
+      `${formatLatLon(p.lat, p.lon)}<br>${formatPinTime(p.t)}` +
+      `<div class="pin-popup-actions">` +
+      `<button class="pin-del btn-action danger">${t('del')}</button></div>`,
+  })), deletePin);
+  renderLegend(t('legendShared'), t('legendUnnamed'));
+  refreshPinControls();
+}
+
+// Called after every recalculation while 時間序列模式 is on. One fix lasts
+// until 清空: while stations are still being added and bearings tuned, the
+// same record moves, so adjusting a bearing does not leave a trail of
+// near-duplicates behind it. 清空 is what starts the next one.
+function recordFixes() {
+  let changed = false;
+  activeGroups().forEach(group => {
+    const r = results.get(group.id);
+    if (!r || !r.target) return;
+    const open = pins.find(p => p.id === recIds.get(group.id));
+    if (open) {
+      if (open.lat === r.target.lat && open.lon === r.target.lon) return;
+      // The timestamp stays at the moment the fix first resolved — tuning a
+      // bearing afterwards refines that same fix, it does not make a later one.
+      open.lat = r.target.lat;
+      open.lon = r.target.lon;
+      open.name = targetLabel(group);
+    } else {
+      const pin = { id: deviceId + '-' + pinSeq++, lat: r.target.lat, lon: r.target.lon,
+                    t: Date.now(), color: groupColor(group), name: targetLabel(group) };
+      pins.push(pin);
+      recIds.set(group.id, pin.id);
+      capPins();
+    }
+    changed = true;
+  });
+  if (changed) { scheduleSettle(); schedulePinSave(); drawPinLayer(); }
+}
+
+// The cap is per device, not per map: your own recording only ever evicts your
+// own oldest point, so merging someone else's series can never push their
+// records — or yours — off the map.
+function pinDevice(id) {
+  return String(id).split('-')[0];
+}
+
+function capPins() {
+  const byDevice = new Map();
+  pins.forEach(p => {
+    const d = pinDevice(p.id);
+    if (!byDevice.has(d)) byDevice.set(d, []);
+    byDevice.get(d).push(p);
+  });
+  const keep = new Set();
+  byDevice.forEach(list => list.slice(-PIN_MAX).forEach(p => keep.add(p.id)));
+  if (keep.size === pins.length) return;
+  pins.forEach(p => {
+    // A record still being written must not be evicted out from under us, or
+    // the next keystroke starts a duplicate beside it.
+    if (!keep.has(p.id)) recIds.forEach((v, k) => { if (v === p.id) recIds.delete(k); });
+  });
+  pins = pins.filter(p => keep.has(p.id));
+}
+
+// Points are kept in time order: the colour ramp reads rank off the array, and
+// a merged-in series interleaves with your own by when it was recorded.
+function sortPins() {
+  pins.sort((a, b) => a.t - b.t);
+}
+
+const TS_INTERVALS = [
+  { s: 30,   label: () => t('secShort', { n: 30 }) },
+  { s: 300,  label: () => t('minShort', { n: 5 }) },
+  { s: 600,  label: () => t('minShort', { n: 10 }) },
+  { s: 900,  label: () => t('minShort', { n: 15 }) },
+  { s: 1800, label: () => t('minShort', { n: 30 }) },
+  { s: 3600, label: () => t('minShort', { n: 60 }) },
+];
+
+function buildIntervalOptions() {
+  tsIntervalEl.innerHTML = TS_INTERVALS
+    .map(o => `<option value="${o.s}">${o.label()}</option>`).join('');
+  tsIntervalEl.value = String(state.tsInterval);
+}
+
+// ── Sharing ────────────────────────────────────────────────────────────────
+// The payload rides in the hash, so the coordinates never reach a server log —
+// these are animal locations and some of the species are poaching-sensitive.
+function encodePins(list) {
+  const payload = { v: 1, p: list.map(p =>
+    [p.id, +p.lat.toFixed(5), +p.lon.toFixed(5), Math.round(p.t / 1000), p.name || '', p.color || '']) };
+  return btoa(unescape(encodeURIComponent(JSON.stringify(payload))))
+    .split('+').join('-').split('/').join('_').replace(/=+$/, '');
+}
+
+function decodePins(str) {
+  try {
+    const b64 = str.replace(/-/g, '+').replace(/_/g, '/');
+    const obj = JSON.parse(decodeURIComponent(escape(atob(b64))));
+    if (!obj || obj.v !== 1 || !Array.isArray(obj.p)) return [];
+    return obj.p
+      .map(r => ({ id: String(r[0]), lat: num(r[1]), lon: num(r[2]),
+                   t: num(r[3]) * 1000, name: String(r[4] || ''), color: String(r[5] || '') }))
+      .filter(p => p.id && p.lat !== null && p.lon !== null && p.t !== null);
+  } catch (e) { return []; }
+}
+
+function tsShareUrl() {
+  const base = location.origin + location.pathname;
+  return base + '#ts=' + encodePins(pins);
+}
+
+// Merge, never replace: ids carry the device that made them, so two people's
+// series add together and re-opening the same link changes nothing.
+function mergePins(incoming) {
+  const have = new Set(pins.map(p => p.id));
+  const added = incoming.filter(p => !have.has(p.id));
+  if (!added.length) return 0;
+  pins = pins.concat(added);
+  sortPins();
+  capPins();
+  savePins();
+  drawPinLayer();
+  return added.length;
+}
+
+function importPinsFromHash() {
+  const m = /[#&]ts=([A-Za-z0-9_-]+)/.exec(location.hash);
+  if (!m) return;
+  // Drop it from the address bar either way, so a refresh does not re-announce
+  // an import and the coordinates stop riding along in a shared screenshot.
+  history.replaceState(null, '', location.pathname + location.search);
+  const incoming = decodePins(m[1]);
+  if (!incoming.length) return;
+  const n = mergePins(incoming);
+  showNotice(n ? t('tsMerged', { n }) : t('tsMergedNone'));
+}
+
+function deletePin(id) {
+  pins = pins.filter(p => p.id !== id);
+  recIds.forEach((v, k) => { if (v === id) recIds.delete(k); });
+  savePins();
+  drawPinLayer();
+}
+
+function clearPins() {
+  if (!pins.length) return;
+  askConfirm(t('confirmClearPins', { n: pins.length }), t('pinClearOk'), () => {
+    pins = [];
+    recIds.clear();
+    savePins();
+    drawPinLayer();
+  });
 }
 
 function forgetState() {
@@ -148,6 +438,8 @@ function loadState() {
   state.nextGroupId = num(saved.nextGroupId) ||
     groups.reduce((m, g) => Math.max(m, g.id), 0) + 1;
   state.multiGroup = saved.multiGroup === true;
+  state.timeSeries = saved.timeSeries === true;
+  state.tsInterval = TS_INTERVALS.some(o => o.s === saved.tsInterval) ? saved.tsInterval : 30;
   if (saved.northMode === 'magnetic') state.northMode = 'magnetic';
   if (saved.coordOrder === 'lonlat') state.coordOrder = 'lonlat';
   if (saved.lineAlgorithm === 'geodesic') state.lineAlgorithm = 'geodesic';
@@ -177,6 +469,11 @@ const btnEstMle        = document.getElementById('btn-est-mle');
 const btnEstCentroid   = document.getElementById('btn-est-centroid');
 const swMultiGroup     = document.getElementById('sw-multi-group');
 const swDark           = document.getElementById('sw-dark');
+const swTimeSeries     = document.getElementById('sw-time-series');
+const tsIntervalEl     = document.getElementById('ts-interval');
+const tsIntervalCol    = document.getElementById('ts-interval-col');
+const tsShareCol       = document.getElementById('ts-share-col');
+const tsShareBtn       = document.getElementById('btn-ts-share');
 const btnLangEl        = document.getElementById('btn-lang');
 const langCodeEl       = document.getElementById('lang-code');
 
@@ -188,26 +485,38 @@ const azPopupCancel    = document.getElementById('az-popup-cancel');
 
 // ── Init ───────────────────────────────────────────────────────────────────
 initMap('map');
-addFitControl(fitPoints);
 loadTheme();
 applyTheme();
 loadLang();
+// The map controls bake their labels in at construction, so they have to wait
+// for the language to be settled — built any earlier they come out Chinese on
+// the /en/ page. Switching language reloads the page, so this runs again.
+addFitControl(fitPoints);
+addSweepControl(clearPins);
+addLegendControl();
 applyStaticStrings();
 langCodeEl.textContent = currentLang().toUpperCase();
 document.getElementById('help-toggle').textContent = t('helpOpen');
 setMapArea(currentLang() === 'tw' ? TW_BOUNDS : null);
+loadPins();
+importPinsFromHash();   // a shared link merges in before anything is drawn
+drawPinLayer();
 const restored = loadState();  // before the UI reads state, so it shows what was saved
 dateInputEl.value = state.date;
 updateNorthUI();
 updateCoordUI();
 updateAlgoUI();
 updateMultiGroupUI();
+buildIntervalOptions();
+updateTimeSeriesUI();
+_suppressRecord = true;   // the first pass is restoring, not recording
 if (restored) {
   renderGroupList();
   recalculate();
 } else {
   addGroup();  // start with one group so the buttons are there to use
 }
+_suppressRecord = false;
 
 // ── North toggle ───────────────────────────────────────────────────────────
 function updateNorthUI() {
@@ -895,9 +1204,14 @@ function renderGroupList() {
     // The collapse button lives in the header, which single-group mode hides —
     // rendering it collapsed there would leave no way to open it again. The
     // flag itself is kept, so returning to 多組別模式 restores the state.
+    // Both flags belong to 多組別模式 only: single mode calculates the group
+    // whatever the enabled flag says, and it hides the header holding the two
+    // controls that set them — rendering either would leave no way back. The
+    // flags stay in the data, so switching the mode on restores what was set.
     const collapsed = state.multiGroup && group.collapsed;
+    const off = state.multiGroup && !group.enabled;
     card.className = 'group-card' + (state.multiGroup ? '' : ' single') +
-      (group.enabled ? '' : ' off') + (collapsed ? ' collapsed' : '');
+      (off ? ' off' : '') + (collapsed ? ' collapsed' : '');
     card.dataset.groupId = group.id;
     card.innerHTML = `
       <div class="group-head">
@@ -1022,6 +1336,7 @@ document.getElementById('btn-add-group').addEventListener('click', () => addGrou
 // reload through localStorage, but the pending debounced write would not.
 btnLangEl.addEventListener('click', () => {
   saveState();
+  savePins();   // recorded points are debounced too, and on their own key
   location.href = currentLang() === 'tw' ? 'en/' : '../';
 });
 
@@ -1037,6 +1352,51 @@ function updateMultiGroupUI() {
   swMultiGroup.classList.toggle('on', state.multiGroup);
   swMultiGroup.setAttribute('aria-checked', String(state.multiGroup));
 }
+
+function updateTimeSeriesUI() {
+  swTimeSeries.classList.toggle('on', state.timeSeries);
+  swTimeSeries.setAttribute('aria-checked', String(state.timeSeries));
+  // The interval and the share button only mean anything while the mode is on,
+  // so they appear with it rather than sitting there inert.
+  tsIntervalCol.hidden = !state.timeSeries;
+  tsShareCol.hidden = !state.timeSeries;
+  tsIntervalEl.value = String(state.tsInterval);
+  // Shown but greyed with nothing to share, rather than appearing and
+  // disappearing as points come and go.
+  tsShareBtn.disabled = !pins.length;
+  setSweepEnabled(state.timeSeries, pins.length > 0);
+}
+
+tsShareBtn.addEventListener('click', async () => {
+  if (!pins.length) { showError(t('tsShareNone')); return; }
+  const url = tsShareUrl();
+  if (navigator.share && matchMedia('(pointer: coarse)').matches) {
+    try {
+      await navigator.share({ title: t('tsShare'), url });
+      return;
+    } catch (err) {
+      if (err.name === 'AbortError') return;  // user dismissed the share sheet
+    }
+  }
+  if (await copyText(url)) flashButton(tsShareBtn, t('copiedLink'), t('tsShareBtn'));
+  else showError(t('errCopyLink'));
+});
+
+tsIntervalEl.addEventListener('change', () => {
+  state.tsInterval = Number(tsIntervalEl.value) || 30;
+  scheduleSettle();   // the fix in hand follows the new setting straight away
+  scheduleSave();
+});
+
+swTimeSeries.addEventListener('click', () => {
+  state.timeSeries = !state.timeSeries;
+  updateTimeSeriesUI();
+  // Switching on starts a fresh record rather than reopening whatever was
+  // last written, so the points either side of the gap stay distinct.
+  recIds.clear();
+  if (state.timeSeries) recordFixes();
+  scheduleSave();
+});
 
 swMultiGroup.addEventListener('click', () => {
   state.multiGroup = !state.multiGroup;
@@ -1228,6 +1588,7 @@ function confirmClearGroup(groupId) {
   askConfirm(t('confirmClear', { g: groupLabel(g), n: g.stations.length }), t('confirmClearOk'), () => {
     g.stations = [];
     g.nextStationId = 1;
+    recIds.delete(groupId);   // the next fix is a new one, not this one moved
     renderGroupList();
     updateDeclinationDisplay();
     recalculate();
@@ -1340,6 +1701,7 @@ function recalculate() {
   });
   drawGroups(activeGroups());
   fitToPoints(fitPoints());
+  if (state.timeSeries && !_suppressRecord) recordFixes();
   renderResults();
   renderGroupSummaries();
   renderStationDistances();
@@ -1427,10 +1789,23 @@ function renderResults() {
 
 // ── Helpers ────────────────────────────────────────────────────────────────
 function showError(msg) {
+  errorBannerEl.classList.remove('notice');
   errorBannerEl.textContent = msg;
   errorBannerEl.hidden = false;
 }
 
+// A merge succeeding is news, not a fault — same banner, but it should not sit
+// there in alarm colours, and it clears itself rather than needing dismissal.
+function showNotice(msg) {
+  errorBannerEl.classList.add('notice');
+  errorBannerEl.textContent = msg;
+  errorBannerEl.hidden = false;
+  setTimeout(() => {
+    if (errorBannerEl.classList.contains('notice')) hideError();
+  }, 5000);
+}
+
 function hideError() {
   errorBannerEl.hidden = true;
+  errorBannerEl.classList.remove('notice');
 }
