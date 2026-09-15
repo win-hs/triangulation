@@ -44,7 +44,7 @@
 <header class="app-bar">
   <div class="app-bar-brand">
     <img class="app-bar-logo" src="../logo.png" alt="">
-    <h1 class="app-bar-title"><span class="title-name" data-i18n="appName">Triangulation:</span><span class="title-desc" data-i18n="appDesc">for wildlife VHF radio tracking</span></h1>
+    <h1 class="app-bar-title"><span class="title-name" data-i18n="appName">Triangulation：</span><span class="title-desc" data-i18n="appDesc">野生動物 VHF 定位工具</span></h1>
   </div>
   <nav class="app-bar-actions">
     <a class="md-btn" href="https://win-hs.github.io/portfolio/field-box/">
@@ -132,7 +132,14 @@
 
   <!-- ② 介面模式 -->
   <div class="section settings">
-    <div class="algo-row">
+    <div class="algo-row modes">
+      <div class="setting-col">
+        <div class="section-title" data-i18n="darkMode">深色模式</div>
+        <button id="sw-dark" class="switch" role="switch" aria-checked="false"
+                data-i18n-title="darkMode" aria-label="深色模式">
+          <span class="switch-thumb"></span>
+        </button>
+      </div>
       <div class="setting-col">
         <div class="section-title" data-i18n="multiGroup">多組別模式</div>
         <button id="sw-multi-group" class="switch" role="switch" aria-checked="false"
@@ -141,11 +148,22 @@
         </button>
       </div>
       <div class="setting-col">
-        <div class="section-title" data-i18n="darkMode">深色模式</div>
-        <button id="sw-dark" class="switch" role="switch" aria-checked="false"
-                data-i18n-title="darkMode" aria-label="深色模式">
+        <div class="section-title" data-i18n="timeSeries">時間序列模式</div>
+        <button id="sw-time-series" class="switch" role="switch" aria-checked="false"
+                data-i18n-title="timeSeriesTitle" aria-label="時間序列模式">
           <span class="switch-thumb"></span>
         </button>
+      </div>
+      <div class="setting-col" id="ts-interval-col" hidden>
+        <div class="section-title" data-i18n="tsInterval">更新間隔</div>
+        <select id="ts-interval" class="ts-interval" data-i18n-title="tsIntervalTitle"></select>
+      </div>
+      <div class="setting-col" id="ts-share-col" hidden>
+        <!-- Empty title keeps the button on the same baseline as the switches
+             beside it; the button carries its own label. -->
+        <div class="section-title" aria-hidden="true">&nbsp;</div>
+        <button id="btn-ts-share" class="btn-action"
+                data-i18n="tsShareBtn" disabled>分享追蹤目標</button>
       </div>
     </div>
   </div>
@@ -189,6 +207,10 @@
       <dd data-i18n="helpOrderD">座標輸入順序。台灣常用「緯度, 經度」（如 24.0, 120.5）；部分 GPS 設備輸出「經度, 緯度」。</dd>
       <dt data-i18n="helpAlgoT">平面 / Geodesic</dt>
       <dd data-i18n="helpAlgoD">平面法：緯經視為 XY，速度快，＜100 km 誤差小。Geodesic：球面大圓交會，長距離更準確。</dd>
+      <dt data-i18n="helpMultiT">多組別模式</dt>
+      <dd data-i18n="helpMultiD">同時追蹤多個目標。每一組就是一個目標，組別名稱即目標名稱，各自有自己的觀測點與交會結果。關閉時只留一組，操作與沒有組別時相同。</dd>
+      <dt data-i18n="helpTsT">時間序列模式</dt>
+      <dd data-i18n="helpTsD">把每次定位結果留在地圖上，看得出目標的移動。每台裝置最多保留 20 點，超過時擠掉自己最舊的。停止調整達「更新間隔」後這次定位才算完成，在那之前微調只會移動同一個點。「分享追蹤目標」產生的連結只含記錄點，對方開啟後併入他的地圖，不會覆蓋他原有的點或設定。</dd>
       <dt data-i18n="helpEstT">Centroid / MLE</dt>
       <dd data-i18n="helpEstD">Centroid：所有交點平均，計算簡單但易受離群值影響。MLE（最大概似估計）：對方位誤差加權，精度較高。</dd>
     </dl>

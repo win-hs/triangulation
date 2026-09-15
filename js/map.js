@@ -36,7 +36,12 @@ let map = null;
 let layerControl = null;
 let overlayGroup = null;  // holds all drawn features
 let pinGroup = null;      // saved targets — outlives clearOverlays()
-let pinClearEl = null;    // the 清空 button, hidden while there is nothing to clear
+let pinLabelGroup = null; // their time captions, re-laid out on every zoom/pan
+let pinData = [];         // kept so the captions can be re-placed without a redraw
+let legendEl = null;      // bottom-right key to the recorded points
+let hatchIds = new Map(); // fill colour -> id of its diagonal-stripe pattern
+let pinClearEl = null;    // the 清空 button
+let sweepBarEl = null;    // its bar, hidden while there is nothing to clear
 let stationMarkers = new Map();  // stationId -> Leaflet marker
 let stationLines = new Map();    // stationId -> Leaflet polyline
 
@@ -51,7 +56,11 @@ function initMap(containerId) {
   // Added before the overlay group so saved targets render beneath the live
   // bearing lines rather than on top of them.
   pinGroup = L.layerGroup().addTo(map);
+  pinLabelGroup = L.layerGroup().addTo(map);
   overlayGroup = L.layerGroup().addTo(map);
+  // Which captions fit depends on the projection, so they are re-placed
+  // whenever it changes rather than once at draw time.
+  map.on('zoomend moveend', refreshPinLabels);
   return map;
 }
 
@@ -169,16 +178,53 @@ function drawTarget(lat, lon, labelHtml) {
  * Clicking a pin opens its popup, where a 刪除 button calls onDelete(id) —
  * deleting on the tap itself would be far too easy to trigger by accident.
  */
+/**
+ * A diagonal-stripe fill for one colour, created once and reused. Imported
+ * points wear it so that on a shared map you can still tell at a glance which
+ * points you recorded yourself — hue alone is already carrying group identity
+ * and recency, and would have had to carry ownership as well.
+ */
+function hatchFor(fill) {
+  if (hatchIds.has(fill)) return hatchIds.get(fill);
+  const svg = pinGroup.getPane ? map.getPane('overlayPane').querySelector('svg') : null;
+  if (!svg) return null;
+  let defs = svg.querySelector('defs');
+  if (!defs) {
+    defs = document.createElementNS('http://www.w3.org/2000/svg', 'defs');
+    svg.insertBefore(defs, svg.firstChild);
+  }
+  const id = 'hatch' + hatchIds.size;
+  const pat = document.createElementNS('http://www.w3.org/2000/svg', 'pattern');
+  pat.setAttribute('id', id);
+  pat.setAttribute('width', '4');
+  pat.setAttribute('height', '4');
+  pat.setAttribute('patternUnits', 'userSpaceOnUse');
+  pat.setAttribute('patternTransform', 'rotate(45)');
+  pat.innerHTML = '<rect width="4" height="4" fill="' + fill + '"/>' +
+                  '<line x1="0" y1="0" x2="0" y2="4" stroke="rgba(255,255,255,0.92)" stroke-width="1.8"/>';
+  defs.appendChild(pat);
+  hatchIds.set(fill, id);
+  return id;
+}
+
 function drawPins(pins, onDelete) {
   pinGroup.clearLayers();
+  hatchIds.clear();        // the defs go with the cleared layers
+  pinData = pins;
   pins.forEach(p => {
+    const hatch = p.shared ? hatchFor(p.fill) : null;
     const m = L.circleMarker([p.lat, p.lon], {
       radius: 6,
-      color: p.color,
+      color: p.stroke,
       weight: 2,
       opacity: 1,
-      fillColor: p.color,
-      fillOpacity: p.fillOpacity,
+      fillColor: hatch ? 'url(#' + hatch + ')' : p.fill,
+      fillOpacity: 1,   // the ramp is carried by hue now, not by transparency:
+                        // stacked translucent dots just turned to mud
+      // A canvas has no notion of an SVG pattern, so the snapshot needs the
+      // plain colours to rebuild the stripes from.
+      pinFill: p.fill,
+      pinShared: !!p.shared,
     }).addTo(pinGroup);
     m.bindPopup(p.popupHtml);
     m.on('popupopen', e => {
@@ -186,38 +232,119 @@ function drawPins(pins, onDelete) {
       if (btn) L.DomEvent.on(btn, 'click', () => { map.closePopup(); onDelete(p.id); });
     });
   });
-  if (pinClearEl) pinClearEl.style.display = pins.length ? '' : 'none';
+  refreshPinLabels();
 }
 
 /**
- * Two stacked buttons under the layer switcher: save the current target(s),
- * and clear every saved one.
+ * The control belongs to 時間序列模式, so it appears with the mode; with no
+ * points it greys out in place rather than vanishing, which would leave the
+ * user wondering where it went.
  */
-function addPinControl(onPin, onClear) {
-  const Pins = L.Control.extend({
+function setSweepEnabled(visible, enabled) {
+  if (!sweepBarEl) return;
+  sweepBarEl.style.display = visible ? '' : 'none';
+  pinClearEl.classList.toggle('disabled', !enabled);
+}
+
+/**
+ * Place the time captions, newest first, skipping any that would land on one
+ * already placed — so where points pile up the time shown is the most recent,
+ * which is the one worth reading.
+ */
+function refreshPinLabels() {
+  if (!pinLabelGroup) return;
+  pinLabelGroup.clearLayers();
+  const placed = [];
+  for (let i = pinData.length - 1; i >= 0; i--) {
+    const p = pinData[i];
+    if (!p.label) continue;
+    const pt = map.latLngToContainerPoint([p.lat, p.lon]);
+    // Rough text metrics are enough here: the caption is a fixed-width clock
+    // string in a fixed font, and a few pixels either way changes nothing.
+    const box = { x1: pt.x + 8, y1: pt.y - 6, x2: pt.x + 8 + p.label.length * 5.1, y2: pt.y + 5 };
+    if (placed.some(b => box.x1 < b.x2 && box.x2 > b.x1 && box.y1 < b.y2 && box.y2 > b.y1)) continue;
+    placed.push(box);
+    L.marker([p.lat, p.lon], {
+      interactive: false,
+      icon: L.divIcon({ className: '', iconSize: [0, 0], iconAnchor: [-8, 6],
+                        html: '<span class="pin-time">' + p.label + '</span>' }),
+    }).addTo(pinLabelGroup);
+  }
+}
+
+/**
+ * Bottom-right key naming every series on the map. Without it a shared map is
+ * a scatter of coloured dots with no way to tell whose target is whose.
+ */
+function addLegendControl() {
+  const Legend = L.Control.extend({
+    options: { position: 'bottomright' },
+    onAdd() {
+      legendEl = L.DomUtil.create('div', 'pin-legend leaflet-control');
+      L.DomEvent.disableClickPropagation(legendEl);
+      legendEl.style.display = 'none';
+      return legendEl;
+    },
+  });
+  new Legend().addTo(map);
+}
+
+/**
+ * One row per distinct series, keyed by name + colour + who recorded it, in
+ * the order the series first appear.
+ */
+function pinLegendEntries() {
+  const seen = new Map();
+  pinData.forEach(p => {
+    const key = (p.shared ? 's' : 'o') + '|' + (p.baseColor || '') + '|' + (p.name || '');
+    if (!seen.has(key)) {
+      seen.set(key, { name: p.name || '', color: p.baseColor || p.fill, shared: !!p.shared });
+    }
+  });
+  return [...seen.values()];
+}
+
+function renderLegend(sharedWord, unnamedWord) {
+  if (!legendEl) return;
+  const rows = pinLegendEntries();
+  legendEl.style.display = rows.length ? '' : 'none';
+  legendEl.innerHTML = rows.map(r => {
+    const swatch = r.shared
+      ? '<span class="legend-dot shared" style="--c:' + r.color + '"></span>'
+      : '<span class="legend-dot" style="background:' + r.color + '"></span>';
+    const label = r.name || unnamedWord;
+    return '<div class="legend-row">' + swatch + '<span>' + label +
+      (r.shared ? ' <i>' + sharedWord + '</i>' : '') + '</span></div>';
+  }).join('');
+}
+
+/**
+ * Broom button under the layer switcher, sized to read as that control's
+ * sibling. Hidden until there is something to sweep away.
+ */
+function addSweepControl(onClear) {
+  const Sweep = L.Control.extend({
     options: { position: 'topright' },
     onAdd() {
-      const div = L.DomUtil.create('div', 'leaflet-bar leaflet-control');
-      const add = L.DomUtil.create('a', 'pin-control', div);
-      add.href = '#';
-      add.title = t('pinTitle');
-      add.setAttribute('role', 'button');
-      add.innerHTML = '<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 2a7 7 0 0 0-7 7c0 5.25 7 13 7 13s7-7.75 7-13a7 7 0 0 0-7-7zm0 9.5A2.5 2.5 0 1 1 12 6.5a2.5 2.5 0 0 1 0 5z"/></svg>';
-      pinClearEl = L.DomUtil.create('a', 'pin-control', div);
+      const div = L.DomUtil.create('div', 'leaflet-bar leaflet-control sweep-bar');
+      pinClearEl = L.DomUtil.create('a', 'sweep-control', div);
       pinClearEl.href = '#';
       pinClearEl.title = t('pinClearTitle');
       pinClearEl.setAttribute('role', 'button');
-      pinClearEl.style.display = 'none';
-      pinClearEl.innerHTML = '<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M6 19a2 2 0 0 0 2 2h8a2 2 0 0 0 2-2V7H6v12zM19 4h-3.5l-1-1h-5l-1 1H5v2h14V4z"/></svg>';
+      pinClearEl.innerHTML = '<svg viewBox="0 0 24 24" aria-hidden="true"><path d="' +
+        'M15 16h4v2h-4zm0-8h7v2h-7zm0 4h6v2h-6zM3 18c0 1.1.9 2 2 2h6c1.1 0 2-.9 ' +
+        '2-2V8H3v10zM14 5h-3l-1-1H6L5 5H2v2h12z"/></svg>';
       L.DomEvent.disableClickPropagation(div);
-      L.DomEvent.on(add, 'click', L.DomEvent.stop);
-      L.DomEvent.on(add, 'click', onPin);
       L.DomEvent.on(pinClearEl, 'click', L.DomEvent.stop);
-      L.DomEvent.on(pinClearEl, 'click', onClear);
+      L.DomEvent.on(pinClearEl, 'click', () => {
+        if (!pinClearEl.classList.contains('disabled')) onClear();
+      });
+      div.style.display = 'none';
+      sweepBarEl = div;
       return div;
     },
   });
-  new Pins().addTo(map);
+  new Sweep().addTo(map);
 }
 
 /**
@@ -370,8 +497,26 @@ function captureMapCanvas() {
       ctx.beginPath();
       ctx.arc(p.x, p.y, o.radius, 0, Math.PI * 2);
       ctx.globalAlpha = o.fillOpacity;
-      ctx.fillStyle = o.fillColor;
+      ctx.fillStyle = o.pinShared ? o.pinFill : o.fillColor;
       ctx.fill();
+      if (o.pinShared) {
+        // Redraw the diagonal stripes by hand, clipped to the dot.
+        ctx.save();
+        ctx.clip();
+        ctx.strokeStyle = 'rgba(255,255,255,0.92)';
+        ctx.lineWidth = 1.8;
+        ctx.beginPath();
+        for (let d = -o.radius * 2; d <= o.radius * 2; d += 4) {
+          ctx.moveTo(p.x + d, p.y - o.radius);
+          ctx.lineTo(p.x + d + o.radius * 2, p.y + o.radius);
+        }
+        ctx.stroke();
+        ctx.restore();
+        // Put the circle back as the current path: the caller strokes it next
+        // for the outline, and would otherwise re-stroke these lines unclipped.
+        ctx.beginPath();
+        ctx.arc(p.x, p.y, o.radius, 0, Math.PI * 2);
+      }
       ctx.globalAlpha = o.opacity == null ? 1 : o.opacity;
       ctx.stroke();
     } else if (layer instanceof L.Polyline) {
@@ -427,6 +572,19 @@ function captureMapCanvas() {
   ctx.textBaseline = 'middle';
   ctx.font = 'bold 14px "Noto Sans TC", system-ui, sans-serif';
   ctx.lineJoin = 'round';
+  ctx.font = '9px "Noto Sans TC", system-ui, sans-serif';
+  container.querySelectorAll('.pin-time').forEach(el => {
+    const r = el.getBoundingClientRect();
+    const x = r.left - box.left;
+    const y = r.top - box.top + r.height / 2;
+    ctx.lineWidth = 3;
+    ctx.strokeStyle = getComputedStyle(el).getPropertyValue('--label-halo').trim() || '#fff';
+    ctx.strokeText(el.textContent, x, y);
+    ctx.fillStyle = getComputedStyle(el).color || '#444';
+    ctx.fillText(el.textContent, x, y);
+  });
+
+  ctx.font = 'bold 14px "Noto Sans TC", system-ui, sans-serif';
   container.querySelectorAll('.station-label').forEach(el => {
     const r = el.getBoundingClientRect();
     const x = r.left - box.left;
@@ -440,5 +598,56 @@ function captureMapCanvas() {
     ctx.fillText(el.textContent, x, y);
   });
 
+  drawLegendOnCanvas(ctx, canvas.width, canvas.height);
   return canvas;
+}
+
+function drawLegendOnCanvas(ctx, W, H) {
+  const rows = pinLegendEntries();
+  if (!rows.length) return;
+  const sharedWord = legendEl && legendEl.querySelector('i')
+    ? legendEl.querySelector('i').textContent : '';
+  const pad = 7, lh = 15, dot = 5;
+  ctx.font = '11px "Noto Sans TC", system-ui, sans-serif';
+  ctx.textAlign = 'left';
+  ctx.textBaseline = 'middle';
+  const labels = rows.map(r => (r.name || '—') + (r.shared ? ' ' + sharedWord : ''));
+  const boxW = Math.max(...labels.map(l => ctx.measureText(l).width)) + pad * 2 + dot * 2 + 6;
+  const boxH = rows.length * lh + pad * 2;
+  const x = W - boxW - 10, y = H - boxH - 10;
+  ctx.fillStyle = 'rgba(255,255,255,0.92)';
+  ctx.strokeStyle = 'rgba(0,0,0,0.3)';
+  ctx.lineWidth = 1;
+  ctx.beginPath();
+  ctx.rect(x + 0.5, y + 0.5, boxW, boxH);
+  ctx.fill();
+  ctx.stroke();
+  rows.forEach((r, i) => {
+    const cy = y + pad + lh * i + lh / 2;
+    const cx = x + pad + dot;
+    ctx.beginPath();
+    ctx.arc(cx, cy, dot, 0, Math.PI * 2);
+    ctx.fillStyle = r.color;
+    ctx.fill();
+    if (r.shared) {
+      ctx.save();
+      ctx.clip();
+      ctx.strokeStyle = 'rgba(255,255,255,0.9)';
+      ctx.lineWidth = 1.6;
+      ctx.beginPath();
+      for (let d = -dot * 2; d <= dot * 2; d += 3.2) {
+        ctx.moveTo(cx + d, cy - dot);
+        ctx.lineTo(cx + d + dot * 2, cy + dot);
+      }
+      ctx.stroke();
+      ctx.restore();
+    }
+    ctx.strokeStyle = 'rgba(0,0,0,0.35)';
+    ctx.lineWidth = 1;
+    ctx.beginPath();
+    ctx.arc(cx, cy, dot, 0, Math.PI * 2);
+    ctx.stroke();
+    ctx.fillStyle = '#202124';
+    ctx.fillText(labels[i], cx + dot + 6, cy);
+  });
 }

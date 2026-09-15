@@ -351,7 +351,22 @@ html[lang="en"] .title-desc { margin-left: .28em; }
 .setting-col {
   display: flex;
   flex-direction: column;
+  align-items: center;   /* label and control share a centre line */
   gap: 4px;
+}
+.setting-col .section-title { text-align: center; }
+
+/* Only meaningful while 時間序列模式 is on, so it is hidden the rest of the time. */
+#ts-share-col .btn-action { white-space: nowrap; }
+
+.ts-interval {
+  font-family: inherit;
+  font-size: 11px;
+  padding: 1px 3px;
+  border: 1px solid var(--md-field-border);
+  border-radius: 4px;
+  background: var(--md-surface);
+  color: var(--md-on-surface);
 }
 
 /* The two settings blocks are glanced at, not read — keep them tight so the
@@ -362,6 +377,9 @@ html[lang="en"] .title-desc { margin-left: .28em; }
 }
 .section.settings .section-title { font-size: 10px; }
 .section.settings .algo-row { gap: 9px; align-items: flex-end; }
+/* 時間序列模式 carries an extra control, so bottom-aligning this row would
+   push the other two titles out of line with it. */
+.section.settings .algo-row.modes { align-items: flex-start; }
 #panel > .section.settings:first-of-type { padding-top: 10px; }
 
 /* With 磁北 selected the 北向 column carries the date too, so it needs the
@@ -499,6 +517,13 @@ html[lang="en"] .title-desc { margin-left: .28em; }
   padding: 6px 10px;
   font-size: 13px;
   margin-bottom: 4px;
+}
+
+/* Same banner used for good news, so it must not wear the alarm colours. */
+#error-banner.notice {
+  background: var(--md-hover-neutral);
+  color: var(--md-on-surface);
+  border-color: var(--md-outline);
 }
 
 /* ── Station list ────────────────────────────────────────────────── */
@@ -641,8 +666,69 @@ html[lang="en"] .title-desc { margin-left: .28em; }
   min-width: 0;
 }
 
-/* Saved-target controls, stacked under the layer switcher. */
-.pin-control svg { width: 18px; height: 18px; fill: var(--md-on-surface); display: block; margin: 3px auto; }
+/* Sits under the layer switcher and reads as its sibling, staying a touch
+   smaller. Leaflet sizes that toggle 36px normally and 44px in touch mode,
+   so this tracks both rather than pinning one number and going badly off on
+   a phone. Leaflet controls keep their light chrome in dark mode, so the
+   icon is a fixed dark grey like .fit-control rather than a theme token. */
+.leaflet-bar a.sweep-control {
+  width: 36px;
+  height: 36px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+.sweep-control svg { width: 26px; height: 26px; fill: #333; }
+.leaflet-bar a.sweep-control.disabled {
+  cursor: default;
+  background: #f4f4f4;
+}
+.sweep-control.disabled svg { fill: #bdbdbd; }
+.leaflet-touch .leaflet-bar a.sweep-control { width: 44px; height: 44px; }
+
+/* Key to the recorded points. Sits over the map, so it carries its own
+   surface rather than borrowing the panel's. */
+.pin-legend {
+  background: var(--md-surface);
+  border: 1px solid var(--md-outline);
+  border-radius: 4px;
+  padding: 5px 8px;
+  font-size: 11px;
+  line-height: 1.5;
+  color: var(--md-on-surface);
+  box-shadow: 0 1px 4px rgba(0, 0, 0, .25);
+  max-width: 190px;
+}
+.legend-row { display: flex; align-items: center; gap: 6px; }
+.legend-row span:last-child { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.legend-row i { font-style: normal; color: var(--md-on-surface-var); }
+.legend-dot {
+  width: 11px;
+  height: 11px;
+  border-radius: 50%;
+  flex-shrink: 0;
+  border: 1px solid rgba(0, 0, 0, .35);
+}
+/* Matches the diagonal stripes the imported points are drawn with. */
+.legend-dot.shared {
+  background: repeating-linear-gradient(45deg, var(--c) 0 2px, rgba(255,255,255,.85) 2px 4px);
+}
+
+/* Time caption beside a recorded point. Deliberately tiny — it is a reference
+   you read when you look for it, not something that should crowd the track.
+   Same halo trick as .station-label so it survives satellite imagery. */
+.pin-time {
+  --label-halo: #fff;
+  position: absolute;
+  white-space: nowrap;
+  font-size: 9px;
+  line-height: 1;
+  font-weight: 500;
+  color: #3c4043;
+  text-shadow: 0 0 2px var(--label-halo), 0 0 2px var(--label-halo), 0 0 3px var(--label-halo);
+  pointer-events: none;
+}
+:root[data-theme="dark"] .pin-time { --label-halo: #000; color: #e8eaed; }
 .pin-popup-actions { margin-top: 6px; }
 .pin-popup-actions .pin-del { width: 100%; }
 
