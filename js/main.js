@@ -233,7 +233,8 @@ function recordFixes() {
       open.name = targetLabel(group);
     } else {
       const pin = { id: deviceId + '-' + pinSeq++, lat: r.target.lat, lon: r.target.lon,
-                    t: Date.now(), color: groupColor(group), name: targetLabel(group) };
+                    t: Date.now(), color: groupColor(group), name: targetLabel(group),
+                    g: group.id };   // so a later rename can find its points
       pins.push(pin);
       recIds.set(group.id, pin.id);
       capPins();
@@ -275,6 +276,7 @@ function sortPins() {
 }
 
 const TS_INTERVALS = [
+  { s: 5,    label: () => t('secShort', { n: 5 }) },
   { s: 30,   label: () => t('secShort', { n: 30 }) },
   { s: 300,  label: () => t('minShort', { n: 5 }) },
   { s: 600,  label: () => t('minShort', { n: 10 }) },
@@ -1089,6 +1091,17 @@ function updateGroupName(id, value) {
   const g = findGroup(id);
   if (!g) return;
   g.name = value.trim();
+  // Points recorded before the target had a name would otherwise stay nameless
+  // and show up as a separate, unnamed series alongside the named one.
+  const label = targetLabel(g);
+  let touched = false;
+  pins.forEach(p => {
+    if (p.g === id && pinDevice(p.id) === deviceId && p.name !== label) {
+      p.name = label;
+      touched = true;
+    }
+  });
+  if (touched) { schedulePinSave(); drawPinLayer(); }
   recalculate();  // the map's target label and the snapshot follow the name
 }
 

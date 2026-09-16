@@ -296,9 +296,12 @@ function addLegendControl() {
 function pinLegendEntries() {
   const seen = new Map();
   pinData.forEach(p => {
-    const key = (p.shared ? 's' : 'o') + '|' + (p.baseColor || '') + '|' + (p.name || '');
-    if (!seen.has(key)) {
+    const key = (p.shared ? 's' : 'o') + '|' + (p.baseColor || '');
+    const row = seen.get(key);
+    if (!row) {
       seen.set(key, { name: p.name || '', color: p.baseColor || p.fill, shared: !!p.shared });
+    } else if (p.name) {
+      row.name = p.name;   // points are in time order, so the last one wins
     }
   });
   return [...seen.values()];

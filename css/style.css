@@ -333,6 +333,17 @@ html[lang="en"] .title-desc { margin-left: .28em; }
   letter-spacing: 0.08em;
 }
 
+.section:not(.settings) > .section-title,
+.section:not(.settings) .section-head .section-title {
+  font-size: 14px;
+  font-weight: 700;
+  color: var(--md-on-surface);
+  letter-spacing: 0.02em;
+  padding-bottom: 3px;
+  border-bottom: 2px solid var(--md-primary);
+  align-self: flex-start;
+}
+
 .control-row {
   display: flex;
   align-items: center;
@@ -357,17 +368,24 @@ html[lang="en"] .title-desc { margin-left: .28em; }
 .setting-col .section-title { text-align: center; }
 
 /* Only meaningful while 時間序列模式 is on, so it is hidden the rest of the time. */
-#ts-share-col .btn-action { white-space: nowrap; }
-
-.ts-interval {
+.ts-interval,
+#ts-share-col .btn-action {
+  padding: 3px 7px;
+  line-height: 16px;   /* matched to .radio-btn, for the same reason */
+  border: 1px solid var(--md-outline);
+  border-radius: 18px;
+  background: var(--md-surface);
+  color: var(--md-on-surface-var);
   font-family: inherit;
   font-size: 11px;
-  padding: 1px 3px;
-  border: 1px solid var(--md-field-border);
-  border-radius: 4px;
-  background: var(--md-surface);
-  color: var(--md-on-surface);
+  font-weight: 500;
+  white-space: nowrap;
+  cursor: pointer;
+  flex: 0 0 auto;
 }
+.ts-interval:hover,
+#ts-share-col .btn-action:not(:disabled):hover { background: var(--md-hover-neutral); }
+#ts-share-col .btn-action:not(:disabled) { color: var(--md-primary); }
 
 /* The two settings blocks are glanced at, not read — keep them tight so the
    observation list and results get the panel's height. */
