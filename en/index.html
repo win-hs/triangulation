@@ -26,9 +26,6 @@
   <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css">
   <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
 
-  <!-- Turf.js -->
-  <script src="https://unpkg.com/@turf/turf@6.5.0/turf.min.js"></script>
-
   <!-- This page is the English entry; the URL decides the language, nothing is stored. -->
   <script>window.PAGE_LANG = "en";</script>
 
@@ -204,17 +201,17 @@
     <button id="help-toggle" class="link-btn">❓ 使用說明 ▶</button>
     <dl id="help-body" hidden>
       <dt data-i18n="helpNorthT">真北 / 磁北</dt>
-      <dd data-i18n="helpNorthD">方位角基準。真北＝地圖北；磁北＝羅盤北。選磁北時需輸入日期，系統自動換算磁偏角，旁邊顯示當前偏差值。</dd>
+      <dd data-i18n="helpNorthD">方位角的基準。真北是地圖的北，磁北是羅盤的北。選磁北要填日期，每個觀測點各自換算偏角。</dd>
       <dt data-i18n="helpOrderT">緯,經 / 經,緯</dt>
-      <dd data-i18n="helpOrderD">座標輸入順序。台灣常用「緯度, 經度」（如 24.0, 120.5）；部分 GPS 設備輸出「經度, 緯度」。</dd>
+      <dd data-i18n="helpOrderD">座標的輸入順序。台灣多半是「緯度, 經度」（24.0, 120.5），有些 GPS 反過來。</dd>
       <dt data-i18n="helpAlgoT">平面 / Geodesic</dt>
-      <dd data-i18n="helpAlgoD">平面法：緯經視為 XY，速度快，＜100 km 誤差小。Geodesic：球面大圓交會，長距離更準確。</dd>
-      <dt data-i18n="helpMultiT">多組別模式</dt>
-      <dd data-i18n="helpMultiD">同時追蹤多個目標。每一組就是一個目標，組別名稱即目標名稱，各自有自己的觀測點與交會結果。關閉時只留一組，操作與沒有組別時相同。</dd>
-      <dt data-i18n="helpTsT">時間序列模式</dt>
-      <dd data-i18n="helpTsD">把每次定位結果留在地圖上，看得出目標的移動。每台裝置最多保留 20 點，超過時擠掉自己最舊的。停止調整達「更新間隔」後這次定位才算完成，在那之前微調只會移動同一個點。「分享追蹤目標」產生的連結只含記錄點，對方開啟後併入他的地圖，不會覆蓋他原有的點或設定。</dd>
+      <dd data-i18n="helpAlgoD">平面：把經緯度當成 XY 來算，快，100 km 內夠準。Geodesic：算球面大圓，距離遠比較準。</dd>
       <dt data-i18n="helpEstT">Centroid / MLE</dt>
-      <dd data-i18n="helpEstD">Centroid：所有交點平均，計算簡單但易受離群值影響。MLE（最大概似估計）：對方位誤差加權，精度較高。</dd>
+      <dd data-i18n="helpEstD">Centroid：把所有交點平均，簡單，但一條歪掉的方位線就會把結果拉走。MLE：依方位誤差加權，通常比較準。</dd>
+      <dt data-i18n="helpMultiT">多組別模式</dt>
+      <dd data-i18n="helpMultiD">一組就是一個目標，各自有自己的觀測點和結果。關掉只留一組。</dd>
+      <dt data-i18n="helpTsT">時間序列模式</dt>
+      <dd data-i18n="helpTsD">每次定位的結果都留在地圖上，看得出移動。停止調整超過「更新間隔」才算一次，之前的微調只是移動同一個點。自己最多 20 點，加上別人分享的最多 5 個人。按「分享追蹤目標」產生連結，對方開啟就併進他的地圖。</dd>
     </dl>
   </div>
 

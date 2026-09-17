@@ -1086,10 +1086,6 @@ function hasBearing(s) {
   return s.azimuth !== null && s.azimuth !== undefined && isFinite(s.azimuth);
 }
 
-function bearingStationsIn(group) {
-  return activeStationsIn(group).filter(hasBearing);
-}
-
 // Every station in a group shares the group's colour — that is what makes it
 // possible to see which bearing lines belong to which target. Within a group
 // they are told apart by the #n badge and the name label.

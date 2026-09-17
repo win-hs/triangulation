@@ -402,7 +402,10 @@ html[lang="en"] .title-desc { margin-left: .28em; }
 
 /* With 磁北 selected the 北向 column carries the date too, so it needs the
    whole width; the other three settings drop to the next line. */
-.section.settings .algo-row > #north-col.magnetic { flex-basis: 100%; }
+.section.settings .algo-row > #north-col.magnetic {
+  flex-basis: 100%;
+  align-items: flex-start;
+}
 
 /* ── Radio button group ──────────────────────────────────────────── */
 .radio-group {
@@ -1226,6 +1229,12 @@ html[lang="en"] .title-desc { margin-left: .28em; }
     align-items: end;
     justify-items: start;
   }
+  .section.settings .algo-row.modes {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: flex-start;
+    gap: 8px 14px;
+  }
   /* With the date showing, 北向 takes the whole first line and the remaining
      three settings share the second — tighter buttons so all three fit. */
   .section.settings .algo-row.magnetic {
@@ -1233,7 +1242,10 @@ html[lang="en"] .title-desc { margin-left: .28em; }
     flex-wrap: wrap;
     gap: 8px;
   }
-  .section.settings .algo-row.magnetic > #north-col { flex-basis: 100%; }
+  .section.settings .algo-row.magnetic > #north-col {
+    flex-basis: 100%;
+    align-items: flex-start;
+  }
   .section.settings .algo-row.magnetic .radio-btn { padding: 5px 8px; }
   .lang-btn { height: 30px; padding: 0 10px 0 8px; }
   .switch { width: 46px; height: 26px; border-radius: 13px; }

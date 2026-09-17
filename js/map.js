@@ -165,7 +165,7 @@ function drawTarget(lat, lon, labelHtml) {
     iconSize: [24, 24],
     iconAnchor: [12, 12],
   });
-  L.marker([lat, lon], { icon })
+  L.marker([lat, lon], { icon, zIndexOffset: 10000 })
     .bindPopup(`${labelHtml ? labelHtml + ' ' : ''}${t('popupTarget')}: ` +
       `${lat.toFixed(6)}, ${lon.toFixed(6)}`)
     .addTo(overlayGroup);
@@ -268,6 +268,7 @@ function refreshPinLabels() {
     placed.push(box);
     L.marker([p.lat, p.lon], {
       interactive: false,
+      zIndexOffset: -10000,
       icon: L.divIcon({ className: '', iconSize: [0, 0], iconAnchor: [-8, 6],
                         html: '<span class="pin-time">' + p.label + '</span>' }),
     }).addTo(pinLabelGroup);
