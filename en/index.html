@@ -73,7 +73,8 @@
     <div id="az-popup-inner">
       <div id="az-popup-coords"></div>
       <label><span data-i18n="bearingPrompt">方位角（0–360°）</span>
-        <input type="number" id="az-popup-input" step="0.1" min="0" max="360" placeholder="0–360">
+        <input type="number" id="az-popup-input" step="0.1" min="0" max="360"
+               data-i18n-placeholder="bearingPlaceholder" placeholder="0–360（可留空）">
       </label>
       <div class="az-popup-actions">
         <button id="az-popup-confirm" class="btn-primary" data-i18n="ok">確認</button>
@@ -182,7 +183,8 @@
         <input type="text" id="input-latlon" data-i18n-placeholder="egLatLon" placeholder="例：24.0, 120.5">
       </label>
       <label><span data-i18n="bearingLabel">方位角°</span>
-        <input type="number" id="input-az" step="0.1" min="0" max="360" placeholder="0–360">
+        <input type="number" id="input-az" step="0.1" min="0" max="360"
+               data-i18n-placeholder="bearingPlaceholder" placeholder="0–360（可留空）">
       </label>
       <div class="form-actions">
         <button id="btn-manual-confirm" class="btn-primary" data-i18n="ok">確認</button>

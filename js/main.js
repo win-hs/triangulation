@@ -454,11 +454,12 @@ function reviveGroups(raw) {
   if (!Array.isArray(raw)) return [];
   return raw.map(g => {
     const stations = (Array.isArray(g.stations) ? g.stations : []).map(s => {
-      const lat = num(s.lat), lon = num(s.lon), azimuth = num(s.azimuth);
-      if (lat === null || lon === null || azimuth === null) return null;
+      const lat = num(s.lat), lon = num(s.lon);
+      if (lat === null || lon === null) return null;
       return {
         id: num(s.id) || 1,
-        lat, lon, azimuth,
+        lat, lon,
+        azimuth: num(s.azimuth),   // null is legitimate: a point with no bearing
         name: typeof s.name === 'string' ? s.name : '',
         enabled: s.enabled !== false,
       };
@@ -943,7 +944,8 @@ async function buildSnapshotCanvas(groups) {
       }
       ctx.fillStyle = snap.fg;
       ctx.font = `13px ${SNAP_FONT}`;
-      const line = `${formatLatLon(s.lat, s.lon)}　${t('snapBearing')} ${s.azimuth.toFixed(1)}°`;
+      const line = formatLatLon(s.lat, s.lon) +
+        (hasBearing(s) ? `　${t('snapBearing')} ${s.azimuth.toFixed(1)}°` : `　${t('snapNoBearing')}`);
       ctx.fillText(line, x, cy);
       const lineW = ctx.measureText(line).width;   // measured before the font shrinks
       // The distance rides along in the shared image too, but stays dim: it is
@@ -1076,6 +1078,18 @@ function activeStationsIn(group) {
   return group.stations.filter(s => s.enabled);
 }
 
+// A bearing is optional: a point can just record where someone stood — the
+// position of a trap, a release site, a listening post that heard nothing.
+// Such a point is drawn, but there is no line to draw from it and nothing for
+// it to intersect, so it takes no part in the calculation.
+function hasBearing(s) {
+  return s.azimuth !== null && s.azimuth !== undefined && isFinite(s.azimuth);
+}
+
+function bearingStationsIn(group) {
+  return activeStationsIn(group).filter(hasBearing);
+}
+
 // Every station in a group shares the group's colour — that is what makes it
 // possible to see which bearing lines belong to which target. Within a group
 // they are told apart by the #n badge and the name label.
@@ -1183,7 +1197,10 @@ function toggleGroupCollapsed(id) {
 function addStation(groupId, lat, lon, azimuth) {
   const g = findGroup(groupId);
   if (!g) return;
-  g.stations.push({ id: g.nextStationId++, lat, lon, azimuth, name: '', enabled: true });
+  g.stations.push({ id: g.nextStationId++, lat, lon,
+                    azimuth: azimuth === null || azimuth === undefined || !isFinite(azimuth)
+                      ? null : azimuth,
+                    name: '', enabled: true });
   renderGroupList();
   updateDeclinationDisplay();
   recalculate();
@@ -1212,7 +1229,9 @@ function updateStationLatLon(groupId, stationId, str) {
 function updateStationAzimuth(groupId, stationId, value) {
   const s = findStation(groupId, stationId);
   if (!s) return;
-  s.azimuth = parseFloat(value);
+  const n = parseFloat(value);
+  // Clearing the field is allowed, and puts the point back to having no line.
+  s.azimuth = String(value).trim() === '' || isNaN(n) ? null : n;
   recalculate();
 }
 
@@ -1246,7 +1265,7 @@ function stationRowHtml(group, s, coordHint) {
       <input type="text" class="latlon-input" value="${formatLatLon(s.lat, s.lon)}"
              placeholder="${coordHint}" data-role="latlon">
       <input type="number" class="az-input" step="0.1" min="0" max="360"
-             value="${s.azimuth}" data-role="azimuth">
+             value="${hasBearing(s) ? s.azimuth : ''}" data-role="azimuth">
       <span class="az-label">°</span>
       <span class="dist-label" title="${t('distTitle')}"></span>
     </div>`;
@@ -1546,7 +1565,8 @@ document.getElementById('input-az').addEventListener('keydown', e => {
 function confirmManual() {
   if (_formGroupId == null) return;
   const latlonStr = document.getElementById('input-latlon').value;
-  const az = parseFloat(document.getElementById('input-az').value);
+  const azRaw = document.getElementById('input-az').value.trim();
+  const az = parseFloat(azRaw);
   const parsed = parseLatLon(latlonStr);
 
   if (!parsed) {
@@ -1554,7 +1574,7 @@ function confirmManual() {
     showError(t('errBadCoord', { eg: ex }));
     return;
   }
-  if (isNaN(az) || az < 0 || az > 360) {
+  if (azRaw !== '' && (isNaN(az) || az < 0 || az > 360)) {
     showError(t('errBadBearing'));
     return;
   }
@@ -1565,7 +1585,7 @@ function confirmManual() {
   document.getElementById('input-az').value = '';
   const groupId = _formGroupId;
   _formGroupId = null;
-  addStation(groupId, parsed.lat, parsed.lon, az);
+  addStation(groupId, parsed.lat, parsed.lon, azRaw === '' ? null : az);
 }
 
 function openAzPopup(groupId, lat, lon) {
@@ -1622,8 +1642,10 @@ azPopupInputEl.addEventListener('keydown', e => {
 
 function confirmAzPopup() {
   if (!_pendingPick) return;
-  const az = parseFloat(azPopupInputEl.value);
-  if (isNaN(az) || az < 0 || az > 360) {
+  const raw = azPopupInputEl.value.trim();
+  const az = parseFloat(raw);
+  // Left blank the point still goes on the map — it just has no bearing line.
+  if (raw !== '' && (isNaN(az) || az < 0 || az > 360)) {
     azPopupInputEl.style.borderColor = '#e00';
     azPopupInputEl.focus();
     return;
@@ -1632,7 +1654,7 @@ function confirmAzPopup() {
   azPopupEl.hidden = true;
   const { groupId, lat, lon } = _pendingPick;
   _pendingPick = null;
-  addStation(groupId, lat, lon, az);
+  addStation(groupId, lat, lon, raw === '' ? null : az);
 }
 
 // ── Destructive actions: clear a group, delete a group ────────────────────
@@ -1703,18 +1725,26 @@ function solveGroup(group) {
   const active = activeStationsIn(group);
   if (active.length === 0) return null;
 
-  let stations = active;
+  // Only the points that carry a bearing can be intersected; the rest are on
+  // the map for reference and take no part in the maths.
+  const aimed = active.filter(hasBearing);
+  let stations = aimed;
   if (state.northMode === 'magnetic') {
     try {
-      stations = applyMagneticCorrection(active, state.date || todayISO());
+      stations = applyMagneticCorrection(aimed, state.date || todayISO());
     } catch (e) {
       return { error: t('errDecl', { msg: e.message }), stations, lineLength: 0 };
     }
   }
 
-  const lineLength = computeLineLength(stations);
-  if (active.length < 2) {
-    return { error: t('errNeedTwo'), stations, lineLength };
+  // Scaled off every point, so a bearing line still reaches across the layout
+  // even when the far point is one without a bearing of its own.
+  const lineLength = computeLineLength(active);
+  if (aimed.length < 2) {
+    return {
+      error: t(active.length >= 2 ? 'errNeedTwoBearings' : 'errNeedTwo'),
+      stations, lineLength,
+    };
   }
 
   try {
@@ -1735,22 +1765,30 @@ function drawGroups(groups) {
   groups.forEach(group => {
     const r = results.get(group.id);
     if (!r) return;
-    activeStationsIn(group).forEach((s, idx) => {
+    // r.stations holds only the points that carry a bearing, corrected for
+    // declination where that applies — so match by id, not by position.
+    const aimed = new Map((r.stations || []).map(s => [s.id, s]));
+    activeStationsIn(group).forEach(s => {
       const color = stationColorOf(group, s);
       const nameHtml = s.name ? escapeHtml(s.name) : '';
+      const c = aimed.get(s.id);
       // In magnetic mode show this point's own declination — it differs from
       // the next observer's, and the panel can only show one figure or a span.
-      const azLine = state.northMode === 'magnetic'
-        ? `<br>${t('popupBearing')}：${r.stations[idx].azimuth.toFixed(1)}°${t('popupTrueSuffix')}` +
+      const azLine = !c
+        ? `<br>${t('popupNoBearing')}`
+        : state.northMode === 'magnetic'
+        ? `<br>${t('popupBearing')}：${c.azimuth.toFixed(1)}°${t('popupTrueSuffix')}` +
           '<br>' + t('popupMagLine', { mag: s.azimuth.toFixed(1),
             dec: formatDec(geoMag(s.lat, s.lon, 0, surveyDate()).dec) })
-        : `<br>${t('popupBearing')}：${r.stations[idx].azimuth.toFixed(1)}°`;
+        : `<br>${t('popupBearing')}：${c.azimuth.toFixed(1)}°`;
       const info = `<b>${escapeHtml(groupLabel(group))} #${s.id}` +
         `${nameHtml ? ' ' + nameHtml : ''}</b>` +
         `<br>${t('popupCoord')}：${formatLatLon(s.lat, s.lon)}` + azLine;
       const key = stationKey(group.id, s.id);
       drawStation(s.lat, s.lon, `#${s.id}`, color, key, info, onMarkerSelect, nameHtml);
-      drawBearingLine(s.lat, s.lon, r.stations[idx].azimuth, r.lineLength, color, key, info, onMarkerSelect);
+      if (c) {
+        drawBearingLine(s.lat, s.lon, c.azimuth, r.lineLength, color, key, info, onMarkerSelect);
+      }
     });
     if (!r.target) return;
     // Unnamed single-group mode leaves the cross uncaptioned — there is
