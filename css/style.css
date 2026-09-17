@@ -690,19 +690,66 @@ html[lang="en"] .title-desc { margin-left: .28em; }
    a phone. Leaflet controls keep their light chrome in dark mode, so the
    icon is a fixed dark grey like .fit-control rather than a theme token. */
 .leaflet-bar a.sweep-control {
-  width: 36px;
-  height: 36px;
   display: flex;
   align-items: center;
   justify-content: center;
 }
-.sweep-control svg { width: 26px; height: 26px; fill: #333; }
+.leaflet-control-layers-toggle {
+  background-size: 17px 17px;
+  width: 30px;
+  height: 30px;
+}
+.leaflet-touch .leaflet-control-layers-toggle { width: 30px; height: 30px; }
+.sweep-control svg { width: 17px; height: 17px; fill: #333; }
 .leaflet-bar a.sweep-control.disabled {
   cursor: default;
   background: #f4f4f4;
 }
 .sweep-control.disabled svg { fill: #bdbdbd; }
-.leaflet-touch .leaflet-bar a.sweep-control { width: 44px; height: 44px; }
+
+/* Opens under the button, listing each individual on the map plus everything. */
+.pin-menu {
+  position: absolute;
+  top: 0;
+  right: calc(100% + 6px);
+  width: max-content;
+  min-width: 150px;
+  max-width: 220px;
+  background: var(--md-surface);
+  border: 1px solid var(--md-outline);
+  border-radius: 6px;
+  box-shadow: 0 2px 8px rgba(0, 0, 0, .28);
+  padding: 3px;
+  overflow: hidden;
+}
+.pin-menu-row {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  width: 100%;
+  padding: 5px 7px;
+  border: none;
+  border-radius: 4px;
+  background: none;
+  font-family: inherit;
+  font-size: 12px;
+  color: var(--md-on-surface);
+  text-align: left;
+  cursor: pointer;
+}
+.pin-menu-row:hover { background: var(--md-hover-neutral); }
+.pin-menu-row .pin-menu-name { flex: 1 1 auto; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.pin-menu-row i { font-style: normal; color: var(--md-on-surface-var); }
+.pin-menu-row b { font-weight: 500; color: var(--md-on-surface-var); font-variant-numeric: tabular-nums; }
+.pin-menu-row.all {
+  justify-content: center;
+  margin-top: 3px;
+  border-top: 1px solid var(--md-outline);
+  border-radius: 0 0 4px 4px;
+  color: var(--md-error-fg);
+  font-weight: 500;
+}
+.leaflet-touch .leaflet-bar a.sweep-control { width: 30px; height: 30px; }
 
 /* Key to the recorded points. Sits over the map, so it carries its own
    surface rather than borrowing the panel's. */

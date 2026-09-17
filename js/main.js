@@ -76,7 +76,8 @@ function saveState() {
   } catch (e) { /* storage unavailable — carry on without it */ }
 }
 
-const PIN_MAX = 20;   // oldest drops out once the map is full
+const PIN_MAX = 20;   // oldest drops out once the map is full, per device
+const PIN_MAX_DEVICES = 5;   // including your own — 100 points is already a lot to read
 const PIN_RAMP = 6;   // how many of the newest carry the colour ramp
 
 let pins = [];        // { id, lat, lon, t, color, name }
@@ -188,7 +189,7 @@ function formatPinClock(ms) {
 
 function refreshPinControls() {
   if (tsShareBtn) tsShareBtn.disabled = !pins.length;
-  setSweepEnabled(state.timeSeries, pins.length > 0);
+  setSweepEnabled(pins.length > 0);
 }
 
 // Which individual a point belongs to: who recorded it, and which target of
@@ -351,6 +352,15 @@ function mergePins(incoming) {
   const have = new Set(pins.map(p => p.id));
   const added = incoming.filter(p => !have.has(p.id));
   if (!added.length) return 0;
+  // The cap is on people, not points: silently dropping a colleague's whole
+  // series would look like the link had failed.
+  const devices = new Set(pins.map(p => pinDevice(p.id)));
+  devices.add(deviceId);
+  added.forEach(p => devices.add(pinDevice(p.id)));
+  if (devices.size > PIN_MAX_DEVICES) {
+    showError(t('tsTooManyDevices', { max: PIN_MAX_DEVICES }));
+    return -1;   // refused, not merged
+  }
   pins = pins.concat(added);
   sortPins();
   capPins();
@@ -370,6 +380,7 @@ function importPinsFromHash() {
   const incoming = decodePins(m[1]);
   if (!incoming.length) return;
   const n = mergePins(incoming);
+  if (n < 0) return;   // refused; mergePins has already said why
   showNotice(n ? t('tsMerged', { n }) : t('tsMergedNone'));
 }
 
@@ -380,14 +391,27 @@ function deletePin(id) {
   drawPinLayer();
 }
 
-function clearPins() {
+function clearPins(series, name) {
   if (!pins.length) return;
-  askConfirm(t('confirmClearPins', { n: pins.length }), t('pinClearOk'), () => {
-    pins = [];
-    recIds.clear();
-    savePins();
-    drawPinLayer();
-  });
+  if (!series) {
+    askConfirm(t('confirmClearPins', { n: pins.length }), t('pinClearOk'), () => {
+      pins = [];
+      recIds.clear();
+      savePins();
+      drawPinLayer();
+    });
+    return;
+  }
+  const doomed = pins.filter(p => seriesKey(p) === series);
+  if (!doomed.length) return;
+  askConfirm(t('confirmClearSeries', { g: name || t('legendUnnamed'), n: doomed.length }),
+    t('pinClearOk'), () => {
+      const gone = new Set(doomed.map(p => p.id));
+      pins = pins.filter(p => !gone.has(p.id));
+      recIds.forEach((v, k) => { if (gone.has(v)) recIds.delete(k); });
+      savePins();
+      drawPinLayer();
+    });
 }
 
 function forgetState() {
@@ -523,7 +547,9 @@ loadLang();
 // for the language to be settled — built any earlier they come out Chinese on
 // the /en/ page. Switching language reloads the page, so this runs again.
 addFitControl(fitPoints);
-addSweepControl(clearPins);
+addSweepControl(clearPins, () => ({
+  all: t('pinClearAll'), shared: t('legendShared'), unnamed: t('legendUnnamed'),
+}));
 addLegendControl();
 applyStaticStrings();
 langCodeEl.textContent = currentLang().toUpperCase();
@@ -1406,7 +1432,7 @@ function updateTimeSeriesUI() {
   // Shown but greyed with nothing to share, rather than appearing and
   // disappearing as points come and go.
   tsShareBtn.disabled = !pins.length;
-  setSweepEnabled(state.timeSeries, pins.length > 0);
+  setSweepEnabled(pins.length > 0);
 }
 
 tsShareBtn.addEventListener('click', async () => {

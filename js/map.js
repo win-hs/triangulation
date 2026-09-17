@@ -39,7 +39,7 @@ let pinGroup = null;      // saved targets — outlives clearOverlays()
 let pinLabelGroup = null; // their time captions, re-laid out on every zoom/pan
 let pinData = [];         // kept so the captions can be re-placed without a redraw
 let legendEl = null;      // bottom-right key to the recorded points
-let hatchIds = new Map(); // fill colour -> id of its diagonal-stripe pattern
+let pinMenuEl = null;     // the 清空 menu, listing each series
 let pinClearEl = null;    // the 清空 button
 let sweepBarEl = null;    // its bar, hidden while there is nothing to clear
 let stationMarkers = new Map();  // stationId -> Leaflet marker
@@ -185,15 +185,15 @@ function drawTarget(lat, lon, labelHtml) {
  * and recency, and would have had to carry ownership as well.
  */
 function hatchFor(fill) {
-  if (hatchIds.has(fill)) return hatchIds.get(fill);
-  const svg = pinGroup.getPane ? map.getPane('overlayPane').querySelector('svg') : null;
+  const id = 'hatch-' + String(fill).replace(/[^a-z0-9]/gi, '');
+  if (document.getElementById(id)) return id;
+  const svg = map.getPane('overlayPane').querySelector('svg');
   if (!svg) return null;
   let defs = svg.querySelector('defs');
   if (!defs) {
     defs = document.createElementNS('http://www.w3.org/2000/svg', 'defs');
     svg.insertBefore(defs, svg.firstChild);
   }
-  const id = 'hatch' + hatchIds.size;
   const pat = document.createElementNS('http://www.w3.org/2000/svg', 'pattern');
   pat.setAttribute('id', id);
   pat.setAttribute('width', '4');
@@ -203,13 +203,11 @@ function hatchFor(fill) {
   pat.innerHTML = '<rect width="4" height="4" fill="' + fill + '"/>' +
                   '<line x1="0" y1="0" x2="0" y2="4" stroke="rgba(255,255,255,0.92)" stroke-width="1.8"/>';
   defs.appendChild(pat);
-  hatchIds.set(fill, id);
   return id;
 }
 
 function drawPins(pins, onDelete) {
   pinGroup.clearLayers();
-  hatchIds.clear();        // the defs go with the cleared layers
   pinData = pins;
   pins.forEach(p => {
     const hatch = p.shared ? hatchFor(p.fill) : null;
@@ -240,10 +238,14 @@ function drawPins(pins, onDelete) {
  * points it greys out in place rather than vanishing, which would leave the
  * user wondering where it went.
  */
-function setSweepEnabled(visible, enabled) {
+function setSweepEnabled(enabled) {
   if (!sweepBarEl) return;
-  sweepBarEl.style.display = visible ? '' : 'none';
   pinClearEl.classList.toggle('disabled', !enabled);
+  if (!enabled) closePinMenu();
+}
+
+function closePinMenu() {
+  if (pinMenuEl) pinMenuEl.hidden = true;
 }
 
 /**
@@ -299,9 +301,11 @@ function pinLegendEntries() {
     const key = p.series || ((p.shared ? 's' : 'o') + '|' + (p.baseColor || ''));
     const row = seen.get(key);
     if (!row) {
-      seen.set(key, { name: p.name || '', color: p.baseColor || p.fill, shared: !!p.shared });
-    } else if (p.name) {
-      row.name = p.name;   // points are in time order, so the last one wins
+      seen.set(key, { key, name: p.name || '', color: p.baseColor || p.fill,
+                      shared: !!p.shared, count: 1 });
+    } else {
+      row.count++;
+      if (p.name) row.name = p.name;   // points are in time order, last wins
     }
   });
   return [...seen.values()];
@@ -325,7 +329,12 @@ function renderLegend(sharedWord, unnamedWord) {
  * Broom button under the layer switcher, sized to read as that control's
  * sibling. Hidden until there is something to sweep away.
  */
-function addSweepControl(onClear) {
+/**
+ * Clearing is rarely all-or-nothing once several people's series share the
+ * map, so the button opens a short menu: every individual on the map, plus
+ * everything. onClear(series) takes a series key, or null for all of them.
+ */
+function addSweepControl(onClear, labels) {
   const Sweep = L.Control.extend({
     options: { position: 'topright' },
     onAdd() {
@@ -337,17 +346,42 @@ function addSweepControl(onClear) {
       pinClearEl.innerHTML = '<svg viewBox="0 0 24 24" aria-hidden="true"><path d="' +
         'M15 16h4v2h-4zm0-8h7v2h-7zm0 4h6v2h-6zM3 18c0 1.1.9 2 2 2h6c1.1 0 2-.9 ' +
         '2-2V8H3v10zM14 5h-3l-1-1H6L5 5H2v2h12z"/></svg>';
+      pinMenuEl = L.DomUtil.create('div', 'pin-menu', div);
+      pinMenuEl.hidden = true;
       L.DomEvent.disableClickPropagation(div);
       L.DomEvent.on(pinClearEl, 'click', L.DomEvent.stop);
       L.DomEvent.on(pinClearEl, 'click', () => {
-        if (!pinClearEl.classList.contains('disabled')) onClear();
+        if (pinClearEl.classList.contains('disabled')) return;
+        if (!pinMenuEl.hidden) { closePinMenu(); return; }
+        renderPinMenu(onClear, labels());
+        pinMenuEl.hidden = false;
       });
-      div.style.display = 'none';
       sweepBarEl = div;
       return div;
     },
   });
   new Sweep().addTo(map);
+  // Anywhere else on the map dismisses it, the way a menu should behave.
+  map.on('click movestart', closePinMenu);
+}
+
+function renderPinMenu(onClear, labels) {
+  const rows = pinLegendEntries();
+  pinMenuEl.innerHTML = '';
+  rows.forEach(r => {
+    const row = L.DomUtil.create('button', 'pin-menu-row', pinMenuEl);
+    const dot = r.shared ? '<span class="legend-dot shared" style="--c:' + r.color + '"></span>'
+                         : '<span class="legend-dot" style="background:' + r.color + '"></span>';
+    row.innerHTML = dot + '<span class="pin-menu-name">' + (r.name || labels.unnamed) +
+      (r.shared ? ' <i>' + labels.shared + '</i>' : '') + '</span>' +
+      '<b>' + r.count + '</b>';
+    L.DomEvent.on(row, 'click', L.DomEvent.stop);
+    L.DomEvent.on(row, 'click', () => { closePinMenu(); onClear(r.key, r.name); });
+  });
+  const all = L.DomUtil.create('button', 'pin-menu-row all', pinMenuEl);
+  all.textContent = labels.all;
+  L.DomEvent.on(all, 'click', L.DomEvent.stop);
+  L.DomEvent.on(all, 'click', () => { closePinMenu(); onClear(null, null); });
 }
 
 /**
