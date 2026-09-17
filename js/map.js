@@ -296,7 +296,7 @@ function addLegendControl() {
 function pinLegendEntries() {
   const seen = new Map();
   pinData.forEach(p => {
-    const key = (p.shared ? 's' : 'o') + '|' + (p.baseColor || '');
+    const key = p.series || ((p.shared ? 's' : 'o') + '|' + (p.baseColor || ''));
     const row = seen.get(key);
     if (!row) {
       seen.set(key, { name: p.name || '', color: p.baseColor || p.fill, shared: !!p.shared });

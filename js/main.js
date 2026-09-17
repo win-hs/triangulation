@@ -191,9 +191,35 @@ function refreshPinControls() {
   setSweepEnabled(state.timeSeries, pins.length > 0);
 }
 
+// Which individual a point belongs to: who recorded it, and which target of
+// theirs it is. Two people tracking with the same colour are still two series.
+function seriesKey(p) {
+  return pinDevice(p.id) + '|' + (p.color || '');
+}
+
+// Recency is counted inside each series, from that individual's own newest
+// fix — not across the map. Ranking globally meant a series recorded earlier
+// in the day came out uniformly grey, with its own movement invisible, just
+// because another individual had been located more recently.
+function seriesRanks() {
+  const bySeries = new Map();
+  pins.forEach(p => {
+    const k = seriesKey(p);
+    if (!bySeries.has(k)) bySeries.set(k, []);
+    bySeries.get(k).push(p);
+  });
+  const rank = new Map();
+  bySeries.forEach(list => {
+    list.sort((a, b) => a.t - b.t);
+    const last = list.length - 1;
+    list.forEach((p, i) => rank.set(p.id, last - i));
+  });
+  return rank;
+}
+
 function drawPinLayer() {
-  const last = pins.length - 1;
-  drawPins(pins.map((p, i) => ({
+  const rank = seriesRanks();
+  drawPins(pins.map(p => ({
     id: p.id,
     lat: p.lat,
     lon: p.lon,
@@ -201,8 +227,9 @@ function drawPinLayer() {
     // target this is, and lightness by how recent.
     shared: pinDevice(p.id) !== deviceId,
     baseColor: p.color || '#1a73e8',
+    series: seriesKey(p),
     name: p.name || '',
-    ...pinStyle(p.color || '#1a73e8', last - i),
+    ...pinStyle(p.color || '#1a73e8', rank.get(p.id)),
     label: formatPinClock(p.t),
     popupHtml:
       (p.name ? `<b>${escapeHtml(p.name)}</b><br>` : '') +
@@ -331,6 +358,8 @@ function mergePins(incoming) {
   drawPinLayer();
   return added.length;
 }
+
+window.addEventListener('hashchange', () => importPinsFromHash());
 
 function importPinsFromHash() {
   const m = /[#&]ts=([A-Za-z0-9_-]+)/.exec(location.hash);
